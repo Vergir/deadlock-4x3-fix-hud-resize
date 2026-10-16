@@ -1,0 +1,26 @@
+Deadlock Narrow-Display HUD fix
+===============================
+Fixes the stretched, oversized HUD on screens narrower than 16:10 (9:8, 5:4, 4:3, 1:1 ...).
+Data-only Panorama (CSS + layout + script) addon. No code injection.
+
+1. Open Deadlock/game/citadel/ (Steam > Deadlock > Manage > Browse local files > game/citadel).
+2. Create a folder named "addons" there if it does not exist and copy pak01_dir.vpk into it.
+   (If you already have a pak01_dir.vpk from another mod, use pak02_dir.vpk, pak03..., up to 99.)
+3. Open gameinfo.gi in a text editor. Inside FileSystem > SearchPaths, make the lines read:
+
+            Mod                 citadel
+            Write               citadel
+            Game                citadel/addons
+            Game                citadel
+            Game                core
+
+   (i.e. add the Mod, Write and Game citadel/addons lines above "Game citadel").
+   Deadlock updates overwrite this file; re-add the lines when the mod stops loading.
+4. Set your resolution with Steam launch options, e.g.  -w 2880 -h 2560
+   (Deadlock's video settings only list 16:9, 16:10 and 21:9 modes.)
+5. Fully restart Deadlock.
+
+Variants: size1.0 makes the HUD the same size as on a 16:9 monitor of the same width;
+size0.8 / 0.9 are smaller, 1.1 / 1.2 larger. Install exactly one.
+These packages measure your screen at runtime, so they work for any ratio narrower than 16:10.
+To remove: delete the vpk from the addons folder.

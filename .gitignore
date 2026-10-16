@@ -1,0 +1,13 @@
+# build outputs (release zips are attached to GitHub releases / GameBanana instead)
+build/
+
+# decompiled vanilla game files, third-party mods and tools (large, not ours)
+extracted/
+ref/
+tools/
+
+# local game config backups
+*.backup-original
+
+__pycache__/
+exceptions.txt

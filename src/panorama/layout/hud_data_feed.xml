@@ -1,0 +1,11 @@
+<root>
+	<styles>
+		<include src="s2r://panorama/styles/hud_data_feed.vcss" />
+	</styles>
+	<scripts>
+		<include src="s2r://panorama/scripts/narrowhud.vts" />
+	</scripts>
+	<HudDataFeed class="DataFeed" hittest="false" hittestchildren="false">
+		<Panel id="EventFeed" />
+	</HudDataFeed>
+</root>

@@ -1,0 +1,63 @@
+/* ---------------------------------------------------------------------------
+   Deadlock narrow-display HUD fix - overrides panorama/styles/base.vcss
+   (included by the main menu / dashboard, loading screens and HUD base layouts).
+   The first block is the vanilla file content (keep in sync with the game).
+   --------------------------------------------------------------------------- */
+.WindowRoot
+{
+	width: 100%;
+	height: 100%;
+	font-family: Radiance, Retail Demo;
+}
+
+#Hud
+{
+	width: 100%;
+	height: 100%;
+}
+
+#Dashboard
+{
+	width: 100%;
+	height: 100%;
+	background-color: #00000033;
+	background-color: gradient( linear, 0% 00%, 100% 100%, from( #121513 ), to( #131615 ) );
+}
+
+#Dashboard.in_matchmaking
+{
+	background-color: #346135;
+}
+
+#Dashboard.connectedToGame
+{
+	background-color: #00000033;
+}
+
+/* ======================= NARROW-DISPLAY HUD : MAIN MENU RESCALE ======================= */
+/* Same idea as the in-game HUD (see npc_icons.css): the engine's "4x3" mode stretches the
+   1440x1080 canvas over the screen. Rescale the dashboard's top-level containers so they
+   lay out on a 1920-wide canvas with the screen's true aspect ratio.
+   Built for {{ASPECT}}:  ui-scale {{SCALE_X}} x {{SCALE_Y}}, size {{WIDTH}} x {{HEIGHT}}. */
+.AspectRatio4x3 .DashboardMain,
+.AspectRatio4x3 CitadelDB > PopupManager,
+.AspectRatio4x3 CitadelDB > #ContextMenuManager,
+.AspectRatio4x3 CitadelDB > #TooltipManager
+{
+	ui-scale: {{SCALE_X}} {{SCALE_Y}} 100%;
+	width: {{WIDTH}};
+	height: {{HEIGHT}};
+	horizontal-align: center;
+	vertical-align: center;
+}
+
+.AspectRatio4x3 CitadelDB > #ToastManager
+{
+	ui-scale: {{SCALE_X}} {{SCALE_Y}} 100%;
+}
+
+/* TEST BUILD: faint blue tint shows the DashboardMain bounds (should cover the whole screen). */
+.AspectRatio4x3 .DashboardMain
+{
+	background-color: #0000ff18;
+}

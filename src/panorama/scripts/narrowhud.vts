@@ -1,0 +1,173 @@
+"use strict";
+// Narrow-display HUD: un-stretches and rescales the Panorama UI.
+// The engine lays "4x3-class" screens out on a 1440x1080 canvas and stretches it to the
+// screen, so the X and Y scales differ. This script measures the real scales on the UI root
+// and rescales the root's top-level containers so the UI is uniform and as large as it would
+// be on a 16:9 screen of the same width, times UI_SIZE (a build-time setting).
+(function () {
+    var TAG = "[NarrowHUD]";
+    var DEBUG = {{DEBUG}};
+    var UI_SIZE = {{UI_SIZE}};
+    var HUD_ASPECT = {{HUD_ASPECT}};   // 0 = use the whole screen; e.g. 1.0 = largest centered 1:1 square
+    var FULLSCREEN = { HudCore: 1, HudExperimentsContainer: 1, HudTakeovers: 1, EscapeMenu: 1, PopupManager: 1,
+                       ContextMenuManager: 1, TooltipManager: 1, RadialsRoot: 1, LoadInFadeCover: 1, DashboardMain: 1 };
+    var SCALEONLY = { CommendNotification: 1, ToastManager: 1, CitadelPartyContainer: 1, CitadelHudCombatLog: 1,
+                      HudPerfStatsBasics: 1 };
+
+    var ctx = $.GetContextPanel();
+    var root = null;
+    var dbg = null;
+    var last = "";
+
+    function log(m) {
+        $.Msg(TAG + " " + m);
+        if (dbg) { dbg.text = (dbg.text + "\n" + m).split("\n").slice(-14).join("\n"); }
+    }
+
+    function findRoot(p) {
+        for (var guard = 0; p && guard < 64; guard++) {
+            var t = p.paneltype, id = p.id;
+            if (t === "CitadelHud" || t === "CitadelDB" || id === "Hud" || id === "Dashboard") { return p; }
+            var parent = p.GetParent();
+            if (!parent) { return p; }
+            p = parent;
+        }
+        return p;
+    }
+
+    function keyOf(c) {
+        if (c.id && (FULLSCREEN[c.id] || SCALEONLY[c.id])) { return c.id; }
+        var names = ["HudCore", "HudTakeovers", "RadialsRoot", "DashboardMain"];
+        for (var i = 0; i < names.length; i++) { if (c.BHasClass(names[i])) { return names[i]; } }
+        if (c.paneltype === "HudPerfStatsBasics") { return "HudPerfStatsBasics"; }
+        return null;
+    }
+
+    // The escape menu's dark backdrop should still cover the whole screen while its contents stay in
+    // the region: let children overflow the container and stretch the background child over the screen.
+    function fixEscapeBackdrop(menu, lw, lh, ox, oy, sx, sy, ux, uy) {
+        if (!(ox > 0 || oy > 0)) { return; }
+        var bg = menu.FindChild("EscapeBackground");
+        if (!bg) { return; }
+        menu.style.overflow = "noclip";
+        menu.style.backgroundColor = "transparent";            // moved onto the backdrop child below
+        bg.style.width = (lw / sx / ux).toFixed(2) + "px";
+        bg.style.height = (lh / sy / uy).toFixed(2) + "px";
+        bg.style.marginLeft = (-ox / sx / ux).toFixed(2) + "px";
+        bg.style.marginTop = (-oy / sy / uy).toFixed(2) + "px";
+        bg.style.backgroundColor = root.BHasClass("InHideout") ? "transparent" : "#000000cc";
+
+        // #RightSide carries the menu's dimming gradient (and the friends list): copy the gradient onto a
+        // full-screen panel of our own and make #RightSide transparent, so the list stays in the region.
+        var fullW = (lw / sx / ux).toFixed(2) + "px", fullH = (lh / sy / uy).toFixed(2) + "px";
+        var offX = (-ox / sx / ux).toFixed(2) + "px", offY = (-oy / sy / uy).toFixed(2) + "px";
+        var grad = menu.FindChild("NarrowHudEscGrad");
+        if (!grad) {
+            grad = $.CreatePanel("Panel", menu, "NarrowHudEscGrad");
+            grad.hittest = false;
+            grad.style.zIndex = "-1";
+        }
+        grad.style.width = fullW; grad.style.height = fullH;
+        grad.style.marginLeft = offX; grad.style.marginTop = offY;
+        grad.style.backgroundColor = "gradient( linear, 100% 0%, 0% 0%, from( #040402 ), to( #04040222 ) )";
+        var rs = menu.FindChild("RightSide");
+        if (rs) { rs.style.backgroundColor = "transparent"; }
+        // the two blur strips: extend them outwards to the screen edges (they have no children)
+        var extX = ox / sx / ux;
+        var lsb = menu.FindChild("LeftStripeBlur");
+        if (lsb) { lsb.style.marginLeft = (-extX).toFixed(2) + "px"; lsb.style.width = (1000 + extX).toFixed(2) + "px"; }
+        var rsb = menu.FindChild("RightSideBlur");
+        if (rsb) { rsb.style.marginRight = (-extX).toFixed(2) + "px"; rsb.style.width = (720 + extX).toFixed(2) + "px"; }
+    }
+
+    function apply(force) {
+        var sx = root.actualuiscale_x, sy = root.actualuiscale_y;
+        var lw = root.actuallayoutwidth, lh = root.actuallayoutheight;   // real pixels
+        if (!(lw > 0) || !(lh > 0) || !(sx > 0) || !(sy > 0)) { return; }   // layout not ready yet
+        // HUD region: the whole screen, or the largest centered HUD_ASPECT box inside it
+        var rw = lw, rh = lh;
+        if (HUD_ASPECT > 0) {
+            if (HUD_ASPECT <= lw / lh) { rw = lh * HUD_ASPECT; } else { rh = lw / HUD_ASPECT; }
+        }
+        var ox = (lw - rw) / 2, oy = (lh - rh) / 2;                       // region offset, real px
+        // reference: the uniform scale a 16:9 layout gets at the region width; never enlarge wide screens
+        var tRef = Math.min(sx, sy, rw / 1920);
+        var ux = tRef * UI_SIZE / sx, uy = tRef * UI_SIZE / sy;
+        var key = [sx, sy, lw, lh].join("|");
+        var changed = force || key !== last;
+        last = key;
+        if (changed) log("root=" + root.paneltype + "#" + root.id + " scale=" + sx.toFixed(3) + "," + sy.toFixed(3) +
+            " px=" + lw.toFixed(0) + "x" + lh.toFixed(0) + " region=" + rw.toFixed(0) + "x" + rh.toFixed(0) +
+            " size=" + UI_SIZE.toFixed(2) + " -> ui-scale " + (ux * 100).toFixed(2) + "% " + (uy * 100).toFixed(2) + "%");
+        var n = root.GetChildCount(), touched = [], others = [], info = [];
+        for (var i = 0; i < n; i++) {
+            var c = root.GetChild(i);
+            if (!c) { continue; }
+            var k = keyOf(c);
+            if (!k) { others.push((c.id || "-") + ":" + c.paneltype); continue; }
+            if (DEBUG && (k === "HudCore" || k === "EscapeMenu" || k === "DashboardMain")) {
+                try {
+                    var num = function (v) { return (typeof v === "number") ? v.toFixed(0) : String(v); };
+                    info.push(k + " w=" + num(c.actuallayoutwidth) + " h=" + num(c.actuallayoutheight) +
+                              " x=" + num(c.actualxoffset) + " y=" + num(c.actualyoffset) + " sw=" + c.style.width);
+                    if (k === "EscapeMenu") {
+                        var bgp = c.FindChild("EscapeBackground");
+                        if (bgp) { info.push("escbg x=" + num(bgp.actualxoffset) + " w=" + num(bgp.actuallayoutwidth)); }
+                    }
+                } catch (e) { info.push(k + " diag-error " + e); }
+            }
+            c.style.uiScale = (ux * 100).toFixed(4) + "% " + (uy * 100).toFixed(4) + "% 100%";
+            if (FULLSCREEN[k]) {
+                // size in the container's own (scaled) units so it covers exactly the region;
+                // symmetric margins (root units) place it correctly whether it is left-aligned or centered
+                c.style.width = (rw / sx / ux).toFixed(2) + "px";
+                c.style.height = (rh / sy / uy).toFixed(2) + "px";
+                c.style.marginLeft = (ox / sx).toFixed(2) + "px";
+                c.style.marginRight = (ox / sx).toFixed(2) + "px";
+                c.style.marginTop = (oy / sy).toFixed(2) + "px";
+                c.style.marginBottom = (oy / sy).toFixed(2) + "px";
+                if (k === "EscapeMenu") { fixEscapeBackdrop(c, lw, lh, ox, oy, sx, sy, ux, uy); }
+            } else if (ox > 0 || oy > 0) {
+                // edge-anchored containers: keep them inside the region (margins are in the root's units)
+                c.style.marginLeft = (ox / sx).toFixed(2) + "px";
+                c.style.marginRight = (ox / sx).toFixed(2) + "px";
+            }
+            touched.push(k);
+        }
+        if (changed) { log("applied to " + touched.length + " containers; unmatched root children: " + others.join(" ")); }
+        if (DEBUG && dbg) {
+            var kept = dbg.text.split("\n").filter(function (l) { return l.indexOf(" w=") < 0; });
+            dbg.text = kept.join("\n") + "\n" + info.join(" | ");
+        }
+    }
+
+    function tick() {
+        try {
+            if (!root) { root = findRoot(ctx); }
+            apply(false);
+        } catch (e) { log("error: " + e); }
+        $.Schedule(0.5, tick);
+    }
+
+    function init() {
+        try {
+            root = findRoot(ctx);
+            if (DEBUG) {
+                var isMenu = (root.paneltype === "CitadelDB" || root.id === "Dashboard");
+                dbg = $.CreatePanel("Label", root, isMenu ? "NarrowHudDebugMenu" : "NarrowHudDebugHud");
+                dbg.style.position = isMenu ? "40px 700px 0px" : "40px 360px 0px";
+                dbg.style.color = isMenu ? "#00ccff" : "#00ff00";
+                dbg.style.zIndex = "2000000";
+                dbg.style.fontSize = "20px";
+                dbg.style.backgroundColor = "#000000c0";
+                dbg.style.padding = "6px";
+                dbg.text = TAG + " debug";
+            }
+            log("context=" + ctx.paneltype + "#" + ctx.id);
+            apply(true);
+        } catch (e) { log("init error: " + e); }
+        $.Schedule(0.5, tick);
+    }
+
+    $.Schedule(0.1, init);
+})();
