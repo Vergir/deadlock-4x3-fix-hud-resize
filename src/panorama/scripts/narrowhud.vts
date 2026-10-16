@@ -7,12 +7,15 @@
 (function () {
     var TAG = "[NarrowHUD]";
     var DEBUG = {{DEBUG}};
-    var UI_SIZE = {{UI_SIZE}};
+    var uiSize = {{UI_SIZE}};          // build-time UI size (1.0 = same size as a 16:9 screen of this width)
     var HUD_ASPECT = {{HUD_ASPECT}};   // 0 = use the whole screen; e.g. 1.0 = largest centered 1:1 square
     var FULLSCREEN = { HudCore: 1, HudExperimentsContainer: 1, HudTakeovers: 1, EscapeMenu: 1, PopupManager: 1,
                        ContextMenuManager: 1, TooltipManager: 1, RadialsRoot: 1, LoadInFadeCover: 1, DashboardMain: 1 };
     var SCALEONLY = { CommendNotification: 1, ToastManager: 1, CitadelPartyContainer: 1, CitadelHudCombatLog: 1,
                       HudPerfStatsBasics: 1 };
+    // full-screen containers that must NOT be confined to the HUD region: tooltips and context menus are
+    // positioned from the cursor and get clipped by a smaller manager; popups (settings) are full-screen UI
+    var NOREGION = { PopupManager: 1, ContextMenuManager: 1, TooltipManager: 1 };
 
     var ctx = $.GetContextPanel();
     var root = null;
@@ -80,6 +83,22 @@
         if (rsb) { rsb.style.marginRight = (-extX).toFixed(2) + "px"; rsb.style.width = (720 + extX).toFixed(2) + "px"; }
     }
 
+    // The shop's layout is built for a 1920px-wide canvas. With UI Size above 1 the HUD canvas is
+    // narrower than that and the shop would collide with the quick-buy panel, so the shop keeps the
+    // largest size that still fits: its own canvas is held at 1920px wide.
+    function fixShop(hudCore, cw, ch) {
+        var shop = hudCore.FindChild("CitadelHudHeroShop");
+        if (!shop) { return; }
+        var s = Math.min(1, cw / 1920);
+        if (s >= 0.999) {
+            shop.style.uiScale = "100% 100% 100%"; shop.style.width = "100%"; shop.style.height = "100%";
+        } else {
+            shop.style.uiScale = (s * 100).toFixed(4) + "% " + (s * 100).toFixed(4) + "% 100%";
+            shop.style.width = (cw / s).toFixed(2) + "px";
+            shop.style.height = (ch / s).toFixed(2) + "px";
+        }
+    }
+
     function apply(force) {
         var sx = root.actualuiscale_x, sy = root.actualuiscale_y;
         var lw = root.actuallayoutwidth, lh = root.actuallayoutheight;   // real pixels
@@ -92,13 +111,13 @@
         var ox = (lw - rw) / 2, oy = (lh - rh) / 2;                       // region offset, real px
         // reference: the uniform scale a 16:9 layout gets at the region width; never enlarge wide screens
         var tRef = Math.min(sx, sy, rw / 1920);
-        var ux = tRef * UI_SIZE / sx, uy = tRef * UI_SIZE / sy;
-        var key = [sx, sy, lw, lh].join("|");
+        var ux = tRef * uiSize / sx, uy = tRef * uiSize / sy;
+        var key = [sx, sy, lw, lh, uiSize].join("|");
         var changed = force || key !== last;
         last = key;
         if (changed) log("root=" + root.paneltype + "#" + root.id + " scale=" + sx.toFixed(3) + "," + sy.toFixed(3) +
             " px=" + lw.toFixed(0) + "x" + lh.toFixed(0) + " region=" + rw.toFixed(0) + "x" + rh.toFixed(0) +
-            " size=" + UI_SIZE.toFixed(2) + " -> ui-scale " + (ux * 100).toFixed(2) + "% " + (uy * 100).toFixed(2) + "%");
+            " size=" + uiSize.toFixed(2) + " -> ui-scale " + (ux * 100).toFixed(2) + "% " + (uy * 100).toFixed(2) + "%");
         var n = root.GetChildCount(), touched = [], others = [], info = [];
         for (var i = 0; i < n; i++) {
             var c = root.GetChild(i);
@@ -116,8 +135,15 @@
                     }
                 } catch (e) { info.push(k + " diag-error " + e); }
             }
-            c.style.uiScale = (ux * 100).toFixed(4) + "% " + (uy * 100).toFixed(4) + "% 100%";
-            if (FULLSCREEN[k]) {
+            var cx = ux, cy = uy;
+            if (k === "PopupManager") { cx = tRef / sx; cy = tRef / sy; }   // popups (settings) ignore UI Size
+            c.style.uiScale = (cx * 100).toFixed(4) + "% " + (cy * 100).toFixed(4) + "% 100%";
+            if (NOREGION[k]) {
+                c.style.width = (lw / sx / cx).toFixed(2) + "px";
+                c.style.height = (lh / sy / cy).toFixed(2) + "px";
+                c.style.marginLeft = "0px"; c.style.marginRight = "0px";
+                c.style.marginTop = "0px"; c.style.marginBottom = "0px";
+            } else if (FULLSCREEN[k]) {
                 // size in the container's own (scaled) units so it covers exactly the region;
                 // symmetric margins (root units) place it correctly whether it is left-aligned or centered
                 c.style.width = (rw / sx / ux).toFixed(2) + "px";
@@ -127,6 +153,7 @@
                 c.style.marginTop = (oy / sy).toFixed(2) + "px";
                 c.style.marginBottom = (oy / sy).toFixed(2) + "px";
                 if (k === "EscapeMenu") { fixEscapeBackdrop(c, lw, lh, ox, oy, sx, sy, ux, uy); }
+                if (k === "HudCore") { fixShop(c, rw / sx / ux, rh / sy / uy); }
             } else if (ox > 0 || oy > 0) {
                 // edge-anchored containers: keep them inside the region (margins are in the root's units)
                 c.style.marginLeft = (ox / sx).toFixed(2) + "px";

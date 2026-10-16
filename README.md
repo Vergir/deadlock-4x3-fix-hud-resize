@@ -65,9 +65,12 @@ Steam launch options (`-w 2880 -h 2560`), restart the game.
 - Resolution and aspect ratio cannot be made selectable in Video settings: the game's aspect
   handler only knows three buckets and the engine ignores an unlisted mode saved in
   `video.txt`, so launch options stay the way to set a narrow resolution.
-- No in-game UI Size slider: Deadlock's Panorama JS has no convar or storage API, and a
-  slider element created at runtime never receives its convar value, so the size is a
-  build-time option instead (prebuilt variants in `build/dist/`).
+- No in-game UI Size slider. A runtime slider works for live preview (convar-bound
+  `CitadelSettingsSlider` with `updateonvaluechange`), but nothing the UI can write survives
+  a restart without hijacking a game convar, and convars come and go with patches, so the
+  size is a build-time option instead (prebuilt variants in `build/dist/`).
+- The game's live config (`machine_convars.vcfg`, `video.txt`) lives under
+  `Steam/userdata/<id>/1422450/local/cfg/`, not in the game folder.
 - Game updates overwrite `gameinfo.gi`; re-run `install.py` (or re-add the lines).
 
 ## Repository layout
