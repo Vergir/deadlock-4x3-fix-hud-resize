@@ -45,18 +45,22 @@ def patch_gameinfo():
 def set_convar(name: str, value: str):
     """Add, update or remove (value "") a convar line in gameinfo.gi's ConVars block."""
     p = GAME / "gameinfo.gi"
-    s = p.read_text(encoding="utf-8")
-    s = re.sub(r'\n\t\t"' + re.escape(name) + r'"\t+"[^"]*"[^\n]*', "", s)
+    original = p.read_text(encoding="utf-8")
+    s = re.sub(r'\n\t\t"' + re.escape(name) + r'"\t+"[^"]*"[^\n]*', "", original)
     if value:
         anchor = "\tConVars\n\t{\t \n"
         if anchor not in s:
             sys.exit("gameinfo.gi: ConVars block not found in the expected form")
         line = '\t\t"' + name + '"\t\t"' + value + '"\t\t// added by install.py\n'
         s = s.replace(anchor, anchor + line, 1)
-        print(f"gameinfo.gi: {name} = {value}")
-    else:
-        print(f"gameinfo.gi: {name} removed")
-    p.write_text(s, encoding="utf-8", newline="")
+    if s == original:
+        print(f"gameinfo.gi: {name} already {'= ' + value if value else 'absent'}")
+        return
+    try:
+        p.write_text(s, encoding="utf-8", newline="")
+    except PermissionError:
+        sys.exit(f"gameinfo.gi is locked (Deadlock running?); {name} not changed")
+    print(f"gameinfo.gi: {name} = {value}" if value else f"gameinfo.gi: {name} removed")
 
 
 def install_vpk():
