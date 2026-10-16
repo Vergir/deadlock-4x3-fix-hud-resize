@@ -86,17 +86,21 @@
     // The shop's layout is built for a 1920px-wide canvas. With UI Size above 1 the HUD canvas is
     // narrower than that and the shop would collide with the quick-buy panel, so the shop keeps the
     // largest size that still fits: its own canvas is held at 1920px wide.
+    // The shop is also laid out for 16:9 (1920x1080): on a taller canvas it leaves the bottom empty,
+    // so give it a 1920x1080 box centered vertically, and move the quick-buy column down with it.
     function fixShop(hudCore, cw, ch) {
         var shop = hudCore.FindChild("CitadelHudHeroShop");
         if (!shop) { return; }
-        var s = Math.min(1, cw / 1920);
-        if (s >= 0.999) {
-            shop.style.uiScale = "100% 100% 100%"; shop.style.width = "100%"; shop.style.height = "100%";
-        } else {
-            shop.style.uiScale = (s * 100).toFixed(4) + "% " + (s * 100).toFixed(4) + "% 100%";
-            shop.style.width = (cw / s).toFixed(2) + "px";
-            shop.style.height = (ch / s).toFixed(2) + "px";
-        }
+        var s = Math.min(1, cw / 1920);                 // shop scale relative to the HUD canvas
+        var boxH = Math.min(ch / s, 1080);              // shop canvas height in its own units (16:9 box)
+        var offset = Math.max(0, (ch - boxH * s) / 2);  // vertical centering, in HudCore units
+        // the whole shop (backdrop included) is the centered box; the user prefers it this way
+        shop.style.uiScale = (s * 100).toFixed(4) + "% " + (s * 100).toFixed(4) + "% 100%";
+        shop.style.width = (cw / s).toFixed(2) + "px";
+        shop.style.height = boxH.toFixed(2) + "px";
+        shop.style.marginTop = offset.toFixed(2) + "px";
+        var qb = hudCore.FindChildTraverse("CitadelHudQuickbuy");
+        if (qb) { qb.style.marginTop = offset.toFixed(2) + "px"; }
     }
 
     function apply(force) {
