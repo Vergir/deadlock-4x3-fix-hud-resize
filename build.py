@@ -164,13 +164,21 @@ def build(aspect: str, test: bool, ui_size: float = 1.0, hud_aspect: str = "", f
     return out_vpk
 
 
+def local_settings() -> dict:
+    """Personal defaults from local_settings.json (aspect, ui_size, hud_aspect, gameinfo_convars)."""
+    import json
+    p = ROOT / "local_settings.json"
+    return json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+
+
 if __name__ == "__main__":
+    ls = local_settings()
     ap = argparse.ArgumentParser()
-    ap.add_argument("--aspect", default="9:8")
+    ap.add_argument("--aspect", default=ls.get("aspect", "9:8"))
     ap.add_argument("--test", action="store_true")
-    ap.add_argument("--ui-size", type=float, default=1.0,
+    ap.add_argument("--ui-size", type=float, default=float(ls.get("ui_size", 1.0)),
                     help="HUD size multiplier; 1.0 = same size as a 16:9 screen of the same width")
-    ap.add_argument("--hud-aspect", default="",
+    ap.add_argument("--hud-aspect", default=ls.get("hud_aspect", ""),
                     help="constrain the HUD to the largest centered W:H region of the screen, e.g. 1:1")
     ap.add_argument("--no-fallback", action="store_true",
                     help="script only; do not ship the aspect-specific CSS fallback (for shared builds)")

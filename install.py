@@ -9,6 +9,7 @@ ASPECT selects build/<aspect>/pak01_dir.vpk (default 9:8).
 configs use); pass "" to remove it again. This is NOT part of the HUD mod, it changes the
 game's field of view.
 """
+import json
 import pathlib
 import re
 import shutil
@@ -16,8 +17,10 @@ import sys
 
 GAME = pathlib.Path(r"C:/Games/Steam/steamapps/common/Deadlock/game/citadel")
 ROOT = pathlib.Path(__file__).resolve().parent
+LOCAL = ROOT / "local_settings.json"
+SETTINGS = json.loads(LOCAL.read_text(encoding="utf-8")) if LOCAL.exists() else {}
 ARGS = [a for a in sys.argv[1:] if not a.startswith("--")]
-ASPECT = ARGS[0] if ARGS else "9:8"
+ASPECT = ARGS[0] if ARGS else SETTINGS.get("aspect", "9:8")
 VPK = ROOT / "build" / ASPECT.replace(":", "x") / "pak01_dir.vpk"
 
 
@@ -69,5 +72,8 @@ def install_vpk():
 if __name__ == "__main__":
     patch_gameinfo()
     install_vpk()
+    # personal gameinfo.gi convars from local_settings.json (e.g. r_aspectratio); re-applied every run
+    for name, value in SETTINGS.get("gameinfo_convars", {}).items():
+        set_convar(name, str(value))
     if "--aspect-convar" in sys.argv:
         set_convar("r_aspectratio", sys.argv[sys.argv.index("--aspect-convar") + 1])
