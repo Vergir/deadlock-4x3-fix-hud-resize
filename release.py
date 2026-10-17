@@ -11,7 +11,7 @@ if dist.exists():
     shutil.rmtree(dist)
 dist.mkdir(parents=True)
 for size in SIZES:
-    name = f"deadlock-narrow-hud-size{size}"
+    name = f"deadlock-hud-resize-size{size}"
     d = dist / name
     vpk = build(False, float(size), "", out_dir=d)
     shutil.rmtree(d / "stage")

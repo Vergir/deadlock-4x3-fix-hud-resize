@@ -1,98 +1,110 @@
-# Deadlock narrow-display HUD fix
+# HUD Resize & 4:3 / 5:4 Fix
 
-Data-only Panorama addon (CSS + two tiny layouts + one script) that fixes Deadlock's HUD on
-displays narrower than 16:10, such as the LG DualUp in landscape (2880x2560, 9:8).
-No code injection, no memory patching, nothing the stock UI hides is revealed.
+![HUD Resize & 4:3 / 5:4 Fix: vanilla 4:3 HUD without the health bar next to the fixed one](docs/images/header.jpg)
 
-## The problem
+Play Deadlock on a 4:3, 5:4 or other narrow screen with a complete, un-stretched HUD, and pick the
+HUD size on any screen. Only the interface changes; gameplay, resolution and field of view stay as
+they are.
 
-On any screen narrower than 16:10 the engine tags the UI root `AspectRatio4x3`, lays the UI
-out on a 1440x1080 canvas and stretches that canvas to the screen. On 2880x2560 that is an
-X scale of 2.00 and a Y scale of 2.37, so everything is 18% too tall and far too large, and
-panels positioned as "centered, then offset by a fixed 1290px" fall off-screen because the
-canvas is much narrower than the 1920px the 16:9 layout assumes.
+Download: [GameBanana](https://gamebanana.com/) · [GitHub releases](https://github.com/Vergir/deadlock-hud-resize/releases/latest)
 
-## The fix
+## Features
 
-`src/panorama/scripts/narrowhud.vts` runs inside both UI trees (in-game HUD and main menu).
-It reads the root's real X/Y scale and pixel size, then sets `ui-scale` on the root's
-top-level containers so the UI becomes uniform (un-stretched) and as large as a 16:9 screen
-of the same width would get, times a `UI_SIZE` factor baked in at build time. The containers
-are enlarged by the inverse so they still cover the screen.
+- **Narrow screens (4:3, 5:4, 9:8, 1:1 ...):** the HUD is no longer stretched and is laid out like a
+  16:9 screen of the same width, so nothing falls off the edge: the health bar is back (vanilla
+  pushes it out of view) and the shop's Quick Buy column no longer covers the items.
+- **HUD size:** eleven versions from 0.5 to 1.5. Size 1.0 is the vanilla size on 16:9 and 16:10, so
+  there it changes nothing; the other sizes shrink or enlarge the whole HUD and the menus.
+- **Crosshair:** shows the real bullet spread at every HUD size. On narrow screens it is round;
+  vanilla stretches it there and shows the spread about twice as wide as it is.
+- **Shop:** stays at its normal size when the HUD is larger, so it always fits; Quick Buy, souls and
+  items take the shop's size while it is open.
+- **Menus:** the main menu, Esc menu, settings, tooltips and scoreboard get the same correction.
 
-On screens the engine does not stretch (16:9, 16:10, 21:9) the script keeps the engine's own
-canvas, so size 1.0 changes nothing there and the other sizes simply scale the vanilla HUD
-(checked in game on 16:9 and 16:10; 21:9 untested).
+## What it does not do
 
-`src/panorama/styles/npc_icons.css` carries the one layout fix that is plain CSS: the health
-bar, anchored to the left edge at its exact vanilla position (315 on a 1920 canvas, 199.5 on
-16:10's 1728 canvas) instead of "centered, then offset by a fixed margin", which drifts onto the
-stat circles when the canvas is narrower. Below size 1.0 the script keeps the bar next to the
-lower-left group, which the engine caps to a centered 1920px band on wider canvases.
+- It does not change resolution or field of view. A narrow resolution is set with Steam launch
+  options, because the game's video settings only offer 16:9, 16:10 and 21:9.
+- It does not add, hide or reveal anything: every element is the game's own, only scaled and placed.
 
-While the shop is open the lower-left group (quick-buy column, souls, items) is shown at the
-shop's scale, so the quick-buy matches the shop at every UI size.
+## Requirements
 
-The crosshair is not scaled with the HUD. The game places the spread pips in UI units and does
-not account for UI scaling (or for `r_aspectratio`), so the crosshair gets its own scale, chosen
-from in-game pellet tests so the pips show the real spread: vanilla on 16:9 / 16:10 / 21:9,
-round at vertical scale x 1440/1920 on narrow screens (vanilla stretches it there and overstates
-the spread about 2x). Private builds also correct for the personal `r_aspectratio`
-(`--fov-aspect`, read from `local_settings.json`).
+- Deadlock with the `citadel/addons` search path in `gameinfo.gi`. Deadlock Mod Manager sets it up;
+  the manual steps are below.
 
-The script is hosted by overriding two small, always-present layouts
-(`hud_data_feed.xml`, `citadel_dashboard_footer_bar.xml`), which only add a `<scripts>`
-include; small files survive game patches better than the 4000-line `hud.vcss`.
+## Installation
 
-## Build
+With **Deadlock Mod Manager**: install the mod from its GameBanana page and pick one size.
+
+Manually:
+
+1. Download one size, e.g. `deadlock-hud-resize-size1.0.zip`. Size 1.0 is the plain fix; pick another
+   size for a smaller or larger HUD.
+2. Copy `pak01_dir.vpk` from the zip into `Deadlock\game\citadel\addons\` (create the folder if needed).
+   If a `pak01_dir.vpk` from another mod is already there, rename this one to the next free number
+   (`pak02_dir.vpk`, ...).
+3. Open `Deadlock\game\citadel\gameinfo.gi` in a text editor and make the start of
+   *FileSystem > SearchPaths* read:
+   ```
+   Mod      citadel
+   Write    citadel
+   Game     citadel/addons
+   Game     citadel
+   Game     core
+   ```
+4. Narrow screens only: in Steam, *Deadlock > Properties > General > Launch Options*, enter your
+   resolution, e.g. `-w 1280 -h 1024`.
+5. Restart Deadlock.
+
+**Uninstall:** delete the vpk. The `gameinfo.gi` lines are the ones every addon uses and can stay.
+
+## Compatibility
+
+- **Game version:** tested with Deadlock build 6793 (October 16, 2026) on Windows.
+- **After a game update:** the mod replaces three small UI files (`hud_data_feed.xml`,
+  `citadel_dashboard_footer_bar.xml`, `npc_icons.css`). If an update changes one of them, the HUD
+  falls back to vanilla, or the game stops at launch with an error naming the file; delete the vpk
+  and check for a new version. Updates also reset `gameinfo.gi`; add the lines again (the mod
+  manager does it for you).
+- **Online play:** only interface files change, as with any HUD mod; no game code, memory or network
+  traffic is touched.
+- **Other mods:** other 4:3 / 5:4 HUD fixes replace the same HUD, mostly with older copies of the
+  game's files; use only one. Mods that replace one of the three files above conflict with this one.
+
+## Known issues
+
+- At size 1.3 and above on a narrow screen a few panels overlap slightly.
+- Below size 1.0 the bottom corners of the HUD move toward the middle: the game keeps that group in
+  a centered 1920-unit band, as it does on ultrawide screens.
+- 21:9 is tested at size 1.0 only.
+
+## How it works
+
+On a screen narrower than 16:10 the game lays the interface out on a 1440x1080 canvas and stretches
+it to the screen, so everything is too tall, and panels placed as "centered, then offset by a fixed
+amount" fall off the narrow canvas. A small script (`src/panorama/scripts/narrowhud.vts`), loaded by
+two tiny layouts the game always shows, measures the real stretch and rescales the interface's
+top-level containers: uniform, and as wide as the 16:9 layout expects, times the chosen size. On 16:9,
+16:10 and 21:9 it keeps the game's own canvas. The shop, the health bar and the crosshair get their
+own corrections; `npc_icons.css` carries the one CSS rule (the health bar position).
+
+## Building from source
 
 ```bash
 pip install vpk
-python build.py --ui-size 1.0 --hud-aspect 1:1   # -> build/mod/pak01_dir.vpk
-python install.py                                # copy into the game + fix gameinfo.gi
-python release.py                                # zips for several sizes in build/dist/
+python build.py --ui-size 1.0     # -> build/mod/pak01_dir.vpk
+python release.py                 # all sizes as zips -> build/dist/
 ```
 
-`--ui-size` scales the whole HUD (0.5 smaller ... 1.5 larger; release.py ships 0.5 to 1.5 in 0.1 steps). `--hud-aspect 1:1` confines the
-HUD to the largest centered 1:1 (or any W:H) region of the screen (the Esc menu's dark backdrop
-still covers the whole screen; its contents stay in the region). `--test` keeps an on-screen
-debug label with the measured scales. `--fov-aspect` is your `r_aspectratio` (0 = default FOV),
-used only for the crosshair size. Without arguments, build.py reads `local_settings.json`.
+`--test` adds an on-screen debug label with the measured values. `--hud-aspect W:H` confines the HUD
+to a centered W:H region and `--fov-aspect` sizes the crosshair for a custom `r_aspectratio`; both
+are for personal builds. `install.py` copies a build into the game and edits `gameinfo.gi`; its game
+path is the author's, change `GAME` at the top. Optional defaults for all three scripts can live in
+a git-ignored `local_settings.json` (`ui_size`, `hud_aspect`, `gameinfo_convars`).
 
-No Valve SDK is needed: `build.py` writes the compiled resource containers itself
-(stylesheets and layouts in the legacy plain-text form, scripts as plain text).
+## Source and support
 
-## Install (end users)
+Code: this repository · License: MIT
 
-See `INSTALL.txt` (shipped in each zip). In short: vpk into `game/citadel/addons/`,
-`Mod citadel` / `Write citadel` / `Game citadel/addons` lines in `gameinfo.gi`, resolution via
-Steam launch options (`-w 2880 -h 2560`), restart the game.
-
-## Panorama scripting notes (learned the hard way)
-
-- Containers are sized with absolute `px` in their own scaled units and positioned with symmetric
-  margins. Percent widths above 100% and `style.horizontalAlign` are not reliable from script.
-- `BIsVisible` does not exist in Deadlock's JS; `actuallayoutwidth/height`, `actualxoffset/yoffset`,
-  `actualuiscale_x/y`, `FindChild(Traverse)`, `BHasClass`, `$.CreatePanel`, `$.Schedule` do.
-- A runtime-created `CitadelSettingsSlider` never receives its convar value; there is no convar
-  or storage API for scripts.
-
-## Known limits
-
-- Resolution and aspect ratio cannot be made selectable in Video settings: the game's aspect
-  handler has four buckets (16:9, 16:10, 21:9, and a hidden `CitadelSetAspectRatio(3)` that
-  covers 4:3 and 5:4), none of them 9:8, and the engine ignores an unlisted mode saved in
-  `video.txt`, so launch options stay the way to set a narrow resolution.
-- No in-game UI Size slider. A runtime slider works for live preview (convar-bound
-  `CitadelSettingsSlider` with `updateonvaluechange`), but nothing the UI can write survives
-  a restart without hijacking a game convar, and convars come and go with patches, so the
-  size is a build-time option instead (prebuilt variants in `build/dist/`).
-- The game's live config (`machine_convars.vcfg`, `video.txt`) lives under
-  `Steam/userdata/<id>/1422450/local/cfg/`, not in the game folder.
-- Game updates overwrite `gameinfo.gi`; re-run `install.py` (or re-add the lines).
-
-## Repository layout
-
-- `src/panorama/` – mod sources (templates; `{{UI_SIZE}}`, `{{DEBUG}}` etc. filled by build.py)
-- `build.py`, `install.py`, `release.py` – tooling
-- `gameinfo.gi.backup-original`, `video.txt.backup-original` – untouched copies of game configs
+Problems: open a GitHub issue or comment on the GameBanana page, and include your resolution, the
+size you installed and a screenshot.

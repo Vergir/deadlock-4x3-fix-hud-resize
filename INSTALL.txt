@@ -1,12 +1,17 @@
 HUD Resize & 4:3 / 5:4 Fix (Deadlock)
 =====================================
-Fixes the stretched, oversized HUD on screens narrower than 16:10 (9:8, 5:4, 4:3, 1:1 ...).
-Data-only Panorama (CSS + layout + script) addon. No code injection.
+A complete, un-stretched HUD on 4:3, 5:4 and other narrow screens, and a HUD size of your choice on
+any screen. Only the interface changes. Each zip is one HUD size: size1.0 is the plain fix (on 16:9
+and 16:10 it changes nothing), 0.5 ... 0.9 are smaller, 1.1 ... 1.5 larger. Install exactly one.
 
+With Deadlock Mod Manager: install from the GameBanana page and pick one size.
+
+Manually:
 1. Open Deadlock/game/citadel/ (Steam > Deadlock > Manage > Browse local files > game/citadel).
 2. Create a folder named "addons" there if it does not exist and copy pak01_dir.vpk into it.
-   (If you already have a pak01_dir.vpk from another mod, use pak02_dir.vpk, pak03..., up to 99.)
-3. Open gameinfo.gi in a text editor. Inside FileSystem > SearchPaths, make the lines read:
+   (If a pak01_dir.vpk from another mod is already there, rename this one to the next free
+   number: pak02_dir.vpk, pak03_dir.vpk, ...)
+3. Open gameinfo.gi in a text editor. Inside FileSystem > SearchPaths, make the first lines read:
 
             Mod                 citadel
             Write               citadel
@@ -14,15 +19,11 @@ Data-only Panorama (CSS + layout + script) addon. No code injection.
             Game                citadel
             Game                core
 
-   (i.e. add the Mod, Write and Game citadel/addons lines above "Game citadel").
-   Deadlock updates overwrite this file; re-add the lines when the mod stops loading.
-4. Set your resolution with Steam launch options, e.g.  -w 2880 -h 2560
-   (Deadlock's video settings only list 16:9, 16:10 and 21:9 modes.)
-5. Fully restart Deadlock.
+   Deadlock updates overwrite this file; add the lines again when the mod stops loading.
+4. Narrow screens only: set your resolution in Steam > Deadlock > Properties > Launch Options,
+   e.g.  -w 1280 -h 1024   (the game's video settings only list 16:9, 16:10 and 21:9 modes).
+5. Restart Deadlock.
 
-Variants: size1.0 makes the HUD the same size as on a 16:9 monitor of the same width;
-size0.5 ... 0.9 are smaller, 1.1 ... 1.5 larger. Install exactly one.
-These packages measure your screen at runtime, so they work for any ratio narrower than 16:10.
-On 16:9 / 16:10 screens size1.0 changes nothing and the other sizes just make the HUD
-smaller or larger.
-To remove: delete the vpk from the addons folder.
+Uninstall: delete the vpk from the addons folder.
+
+Source, issues and all sizes: https://github.com/Vergir/deadlock-hud-resize
