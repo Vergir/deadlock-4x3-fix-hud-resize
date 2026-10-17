@@ -27,11 +27,6 @@ Download: [GameBanana](https://gamebanana.com/mods/728787) · [GitHub releases](
   options, because the game's video settings only offer 16:9, 16:10 and 21:9.
 - It does not add, hide or reveal anything: every element is the game's own, only scaled and placed.
 
-## Requirements
-
-- Deadlock with the `citadel/addons` search path in `gameinfo.gi`. Deadlock Mod Manager sets it up;
-  the manual steps are below.
-
 ## Installation
 
 With **Deadlock Mod Manager**: install the mod from its GameBanana page and pick one size.
