@@ -21,7 +21,7 @@ Data-only Panorama (CSS + layout + script) addon. No code injection.
 5. Fully restart Deadlock.
 
 Variants: size1.0 makes the HUD the same size as on a 16:9 monitor of the same width;
-size0.8 / 0.9 are smaller, 1.1 / 1.2 larger. Install exactly one.
+size0.5 ... 0.9 are smaller, 1.1 ... 1.5 larger. Install exactly one.
 These packages measure your screen at runtime, so they work for any ratio narrower than 16:10.
 On 16:9 / 16:10 screens size1.0 changes nothing and the other sizes just make the HUD
 smaller or larger.

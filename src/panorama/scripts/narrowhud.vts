@@ -9,6 +9,7 @@
     var DEBUG = {{DEBUG}};
     var uiSize = {{UI_SIZE}};          // build-time UI size (1.0 = same size as a 16:9 screen of this width)
     var HUD_ASPECT = {{HUD_ASPECT}};   // 0 = use the whole screen; e.g. 1.0 = largest centered 1:1 square
+    var FOV_ASPECT = {{FOV_ASPECT}};   // personal r_aspectratio (private builds only) for the crosshair; 0 = default
     var FULLSCREEN = { HudCore: 1, HudExperimentsContainer: 1, HudTakeovers: 1, EscapeMenu: 1, PopupManager: 1,
                        ContextMenuManager: 1, TooltipManager: 1, RadialsRoot: 1, LoadInFadeCover: 1, DashboardMain: 1 };
     var SCALEONLY = { CommendNotification: 1, ToastManager: 1, CitadelPartyContainer: 1, CitadelHudCombatLog: 1,
@@ -21,10 +22,11 @@
     var root = null;
     var dbg = null;
     var last = "";
+    var lastError = "";   // shown on the debug label; everything else goes to the console only
 
     function log(m) {
         $.Msg(TAG + " " + m);
-        if (dbg) { dbg.text = (dbg.text + "\n" + m).split("\n").slice(-14).join("\n"); }
+        if (m.indexOf("error") >= 0) { lastError = m; }
     }
 
     function findRoot(p) {
@@ -36,6 +38,37 @@
             p = parent;
         }
         return p;
+    }
+
+    // engine classes such as AspectRatio4x3 ("narrower than 16:10") sit on the UI root or an ancestor
+    function hasClassUp(p, cls) {
+        for (var guard = 0; p && guard < 64; guard++) {
+            if (p.BHasClass(cls)) { return true; }
+            p = p.GetParent();
+        }
+        return false;
+    }
+
+    // x offset of a panel inside an ancestor, in real pixels
+    function offsetIn(p, ancestor) {
+        var x = 0;
+        for (var guard = 0; p && p !== ancestor && guard < 64; guard++) { x += p.actualxoffset; p = p.GetParent(); }
+        return x;
+    }
+
+    // The health bar is anchored to the left edge at its vanilla position by npc_icons.css. The rest of the
+    // lower-left group (#StatsAndModsContainer: stat circles, souls, items) is "clamp_width": on a canvas wider
+    // than 1920 (UI size below 1) the engine caps it to a centered 1920px band. Keep the bar at the same vanilla
+    // offset from that band. u = real px per HudCore unit. 21:9 is left vanilla.
+    function fixHealthBar(hudCore, u) {
+        var base = (hasClassUp(root, "AspectRatio4x3") || hasClassUp(root, "AspectRatio16x9")) ? 315 :
+                   hasClassUp(root, "AspectRatio16x10") ? 199.5 : -1;
+        if (base < 0) { return; }
+        var hb = hudCore.FindChildTraverse("health_and_abilities_container");
+        var sm = hudCore.FindChildTraverse("StatsAndModsContainer");
+        if (!hb || !sm) { return; }
+        var band = Math.max(0, offsetIn(sm, hudCore) / u);
+        hb.style.marginLeft = (base + band).toFixed(2) + "px";
     }
 
     function keyOf(c) {
@@ -95,13 +128,63 @@
         var s = Math.min(1, cw / refW);                 // shop scale relative to the HUD canvas
         var boxH = Math.min(ch / s, 1080);              // shop canvas height in its own units (16:9 box)
         var offset = Math.max(0, (ch - boxH * s) / 2);  // vertical centering, in HudCore units
-        // the whole shop (backdrop included) is the centered box; the user prefers it this way
+        // the whole shop (backdrop included) is the centered box; the user prefers it this way (a full-screen
+        // backdrop with the content in the box was tried 2026-10-18 and rejected)
         shop.style.uiScale = (s * 100).toFixed(4) + "% " + (s * 100).toFixed(4) + "% 100%";
         shop.style.width = (cw / s).toFixed(2) + "px";
         shop.style.height = boxH.toFixed(2) + "px";
         shop.style.marginTop = offset.toFixed(2) + "px";
+        var sm = hudCore.FindChildTraverse("StatsAndModsContainer");
         var qb = hudCore.FindChildTraverse("CitadelHudQuickbuy");
-        if (qb) { qb.style.marginTop = offset.toFixed(2) + "px"; }
+        shopMode = { sm: sm, qb: qb, s: s, cw: cw, ch: ch, offset: offset };
+        applyShopMode(true);
+    }
+
+    // The game places the crosshair pips (bullet spread) and ability reticles in UI units and ignores both
+    // our rescale and r_aspectratio (measured 2026-10-18: same pip translate at sizes 0.5 / 1.5 and with /
+    // without r_aspectratio). So #crosshair gets its own uniform scale t (real px per unit), chosen so the pips
+    // match the real spread:
+    //  - 16:9 / 16:10 / 21:9: the engine's own scale, i.e. exactly vanilla.
+    //  - narrow (4:3 class): vanilla stretches it (2.00 x 2.37 on 9:8) and overstates the spread. Measured at
+    //    rest: 24 units on 9:8 vs 18 on 16:9 for a world drawn 1.58x larger (Hor+), which fits
+    //    t = sy * 1440 / 1920 (round; 1.78 on 9:8, 1.5 on exact 4:3).
+    //  - a personal r_aspectratio widens the view the game does not know about: t *= screen aspect / FOV_ASPECT.
+    var crosshairT = 0, crosshairFov = 1;   // for the debug label
+    function fixCrosshair(hudCore, narrow, sx, sy, ux, uy, lw, lh, cw, ch) {
+        var cr = hudCore.FindChildTraverse("crosshair");
+        if (!cr) { return; }
+        var fov = FOV_ASPECT > 0 ? (lw / lh) / FOV_ASPECT : 1;
+        var t = (narrow ? sy * 1440 / 1920 : sx) * fov;
+        crosshairT = t; crosshairFov = fov;
+        var kx = t / (sx * ux), ky = t / (sy * uy);           // relative to HudCore
+        cr.style.uiScale = (kx * 100).toFixed(4) + "% " + (ky * 100).toFixed(4) + "% 100%";
+        cr.style.width = (cw / kx).toFixed(2) + "px";        // own units, covers HudCore
+        cr.style.height = (ch / ky).toFixed(2) + "px";
+    }
+
+    // While the shop is open, the lower-left group (#StatsAndModsContainer: quick-buy column, souls, items) is
+    // shown at the shop's scale so the quick-buy matches the shop; closed, it is back to vanilla (100%, full
+    // size). Vanilla already transitions this container's ui-scale. Sizes are in the container's own units.
+    // Polled every 50 ms (watchShop) so the switch follows the engine's gShopOpen class without a visible lag.
+    var shopMode = null, shopKey = "";
+    function applyShopMode(force) {
+        var m = shopMode;
+        if (!m || !m.sm || !m.sm.IsValid()) { return; }
+        var open = m.sm.BHasClass("gShopOpen") && m.s < 0.999;
+        var key = [open, m.s, m.cw, m.ch, m.offset].join("|");
+        if (!force && key === shopKey) { return; }
+        shopKey = key;
+        var k = open ? m.s : 1;
+        m.sm.style.uiScale = (k * 100).toFixed(4) + "% " + (k * 100).toFixed(4) + "% 100%";
+        m.sm.style.width = open ? (m.cw / k).toFixed(2) + "px" : "100%";
+        m.sm.style.height = open ? (m.ch / k).toFixed(2) + "px" : "100%";
+        // the quick-buy column starts at the top of the shop box (offset is in HudCore units)
+        if (m.qb && m.qb.IsValid()) { m.qb.style.marginTop = (m.offset / k).toFixed(2) + "px"; }
+    }
+
+    function watchShop() {
+        try { applyShopMode(false); } catch (e) { log("shop error: " + e); }
+        $.Schedule(0.05, watchShop);
     }
 
     function apply(force) {
@@ -114,48 +197,28 @@
             if (HUD_ASPECT <= lw / lh) { rw = lh * HUD_ASPECT; } else { rh = lw / HUD_ASPECT; }
         }
         var ox = (lw - rw) / 2, oy = (lh - rh) / 2;                       // region offset, real px
-        // reference canvas width: narrow screens are stretched (sx != sy) and get the 1920px a 16:9
-        // layout expects; unstretched screens (16:9, 16:10, 21:9) keep the engine's own canvas width,
-        // so UI Size 1.0 leaves them exactly vanilla
-        var stretched = Math.abs(sx / sy - 1) > 0.01;
-        var refW = stretched ? 1920 : lw / sx;
+        // reference canvas width: narrow screens (engine class AspectRatio4x3: 1440x1080 canvas, stretched
+        // unless the screen is exactly 4:3) get the 1920px a 16:9 layout expects; 16:9, 16:10 and 21:9 keep
+        // the engine's own canvas width, so UI Size 1.0 leaves them exactly vanilla
+        var narrow = hasClassUp(root, "AspectRatio4x3");
+        var refW = narrow ? 1920 : lw / sx;
         // reference scale: that canvas fitted to the region width; never enlarge
         var tRef = Math.min(sx, sy, rw / refW);
         var ux = tRef * uiSize / sx, uy = tRef * uiSize / sy;
-        var key = [sx, sy, lw, lh, uiSize].join("|");
+        var key = [sx, sy, lw, lh, uiSize, narrow].join("|");
         var changed = force || key !== last;
         last = key;
-        if (changed) log("root=" + root.paneltype + "#" + root.id + " scale=" + sx.toFixed(3) + "," + sy.toFixed(3) +
-            " px=" + lw.toFixed(0) + "x" + lh.toFixed(0) + " region=" + rw.toFixed(0) + "x" + rh.toFixed(0) +
-            " size=" + uiSize.toFixed(2) + " -> ui-scale " + (ux * 100).toFixed(2) + "% " + (uy * 100).toFixed(2) + "%");
-        var n = root.GetChildCount(), touched = [], others = [], info = [];
+        var state = "px=" + lw.toFixed(0) + "x" + lh.toFixed(0) + " scale=" + sx.toFixed(3) + "," + sy.toFixed(3) +
+            " size=" + uiSize.toFixed(2) + (narrow ? " narrow" : " ref=" + refW.toFixed(0)) +
+            " -> ui-scale " + (ux * 100).toFixed(2) + "% " + (uy * 100).toFixed(2) + "%";
+        if (changed) { log(state + " region=" + rw.toFixed(0) + "x" + rh.toFixed(0)); }
+        var n = root.GetChildCount(), others = [], hudCore = null;
         for (var i = 0; i < n; i++) {
             var c = root.GetChild(i);
             if (!c) { continue; }
             var k = keyOf(c);
             if (!k) { others.push((c.id || "-") + ":" + c.paneltype); continue; }
-            if (DEBUG && (k === "HudCore" || k === "EscapeMenu" || k === "DashboardMain")) {
-                try {
-                    var num = function (v) { return (typeof v === "number") ? v.toFixed(0) : String(v); };
-                    info.push(k + " w=" + num(c.actuallayoutwidth) + " h=" + num(c.actuallayoutheight) +
-                              " x=" + num(c.actualxoffset) + " y=" + num(c.actualyoffset) + " sw=" + c.style.width);
-                    if (k === "EscapeMenu") {
-                        var bgp = c.FindChild("EscapeBackground");
-                        if (bgp) { info.push("escbg x=" + num(bgp.actualxoffset) + " w=" + num(bgp.actuallayoutwidth)); }
-                    }
-                    if (k === "HudCore") {
-                        // health bar position in HudCore canvas units (offsets summed up to HudCore)
-                        var hb = c.FindChildTraverse("health_and_abilities_container");
-                        if (hb) {
-                            var hx = 0, p = hb;
-                            while (p && p !== c) { hx += p.actualxoffset; p = p.GetParent(); }
-                            var u = sx * ux;
-                            info.push("\nhb x=" + (hx / u).toFixed(1) + " w=" + (hb.actuallayoutwidth / u).toFixed(1) +
-                                      " canvas=" + (rw / u).toFixed(0) + "x" + (rh / (sy * uy)).toFixed(0));
-                        }
-                    }
-                } catch (e) { info.push(k + " diag-error " + e); }
-            }
+            if (k === "HudCore") { hudCore = c; }
             var cx = ux, cy = uy;
             if (k === "PopupManager") { cx = tRef / sx; cy = tRef / sy; }   // popups (settings) ignore UI Size
             c.style.uiScale = (cx * 100).toFixed(4) + "% " + (cy * 100).toFixed(4) + "% 100%";
@@ -174,18 +237,38 @@
                 c.style.marginTop = (oy / sy).toFixed(2) + "px";
                 c.style.marginBottom = (oy / sy).toFixed(2) + "px";
                 if (k === "EscapeMenu") { fixEscapeBackdrop(c, lw, lh, ox, oy, sx, sy, ux, uy); }
-                if (k === "HudCore") { fixShop(c, rw / sx / ux, rh / sy / uy, refW); }
+                if (k === "HudCore") {
+                    fixShop(c, rw / sx / ux, rh / sy / uy, refW);
+                    fixHealthBar(c, sx * ux);
+                    fixCrosshair(c, narrow, sx, sy, ux, uy, lw, lh, rw / sx / ux, rh / sy / uy);
+                }
             } else if (ox > 0 || oy > 0) {
                 // edge-anchored containers: keep them inside the region (margins are in the root's units)
                 c.style.marginLeft = (ox / sx).toFixed(2) + "px";
                 c.style.marginRight = (ox / sx).toFixed(2) + "px";
             }
-            touched.push(k);
         }
-        if (changed) { log("applied to " + touched.length + " containers; unmatched root children: " + others.join(" ")); }
+        if (changed) { log("unmatched root children: " + others.join(" ")); }
         if (DEBUG && dbg) {
-            var kept = dbg.text.split("\n").filter(function (l) { return l.indexOf(" w=") < 0; });
-            dbg.text = kept.join("\n") + "\n" + info.join(" | ");
+            // two lines: the scale state, and (HUD only) canvas size + health bar / lower-left group x in canvas units
+            var u = sx * ux, extra = "canvas=" + (rw / u).toFixed(0) + "x" + (rh / (sy * uy)).toFixed(0);
+            if (hudCore) {
+                var hb = hudCore.FindChildTraverse("health_and_abilities_container");
+                var sm = hudCore.FindChildTraverse("StatsAndModsContainer");
+                if (hb) { extra += "  hb x=" + (offsetIn(hb, hudCore) / u).toFixed(1); }
+                if (sm) { extra += "  sm x=" + (offsetIn(sm, hudCore) / u).toFixed(1); }
+                // crosshair pips (placed by game code): real-pixel gap and what the game sets on them
+                try {
+                    var cr = hudCore.FindChildTraverse("crosshair");
+                    var rp = cr && cr.FindChildTraverse("RightPip"), lp = cr && cr.FindChildTraverse("LeftPip");
+                    if (rp) {
+                        // real px per unit at the pip (should equal the engine's own scale) and the game's translate
+                        extra += "\npip scale=" + Number(rp.actualuiscale_x).toFixed(3) + "," + Number(rp.actualuiscale_y).toFixed(3) +
+                                 " target=" + crosshairT.toFixed(3) + " fov=" + crosshairFov.toFixed(3) + " tr=" + rp.style.transform;
+                    } else { extra += "\npips not found"; }
+                } catch (e) { extra += "\npips error " + e; }
+            }
+            dbg.text = state + "\n" + extra + (lastError ? "\n" + lastError : "");
         }
     }
 
@@ -215,6 +298,7 @@
             apply(true);
         } catch (e) { log("init error: " + e); }
         $.Schedule(0.5, tick);
+        $.Schedule(0.05, watchShop);
     }
 
     $.Schedule(0.1, init);

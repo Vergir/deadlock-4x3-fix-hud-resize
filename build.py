@@ -35,8 +35,10 @@ DEFAULT_LAYOUT_MODE = "laco"
 DEFAULT_OUT = ROOT / "build" / "mod"
 
 
-def template_values(test: bool, ui_size: float = 1.0, hud_aspect: str = "") -> dict:
-    """hud_aspect "W:H" confines the HUD to the largest centered W:H region; "" = whole screen."""
+def template_values(test: bool, ui_size: float = 1.0, hud_aspect: str = "", fov_aspect: float = 0.0) -> dict:
+    """hud_aspect "W:H" confines the HUD to the largest centered W:H region; "" = whole screen.
+    fov_aspect: the personal r_aspectratio (0 = default FOV), only used to size the crosshair so its
+    pips match the real bullet spread; never set for shared builds."""
     hud_r = 0.0
     if hud_aspect:
         hw, hh = (float(x) for x in hud_aspect.split(":"))
@@ -45,6 +47,7 @@ def template_values(test: bool, ui_size: float = 1.0, hud_aspect: str = "") -> d
         "DEBUG": "true" if test else "false",
         "UI_SIZE": f"{ui_size:.4f}",
         "HUD_ASPECT": f"{hud_r:.6f}",
+        "FOV_ASPECT": f"{fov_aspect:.6f}",
     }
 
 
@@ -114,12 +117,14 @@ def render(text: str, values: dict, test: bool) -> str:
     return re.sub(r"\{\{([A-Z_]+)\}\}", lambda m: values[m.group(1)], text)
 
 
-def build(test: bool, ui_size: float = 1.0, hud_aspect: str = "", out_dir: pathlib.Path = DEFAULT_OUT) -> pathlib.Path:
-    values = template_values(test, ui_size, hud_aspect)
+def build(test: bool, ui_size: float = 1.0, hud_aspect: str = "", out_dir: pathlib.Path = DEFAULT_OUT,
+          fov_aspect: float = 0.0) -> pathlib.Path:
+    values = template_values(test, ui_size, hud_aspect, fov_aspect)
     stage = out_dir / "stage"
     if stage.exists():
         shutil.rmtree(stage)
-    print(f"ui size {ui_size}, hud region {hud_aspect or 'full screen'}, debug={values['DEBUG']}")
+    print(f"ui size {ui_size}, hud region {hud_aspect or 'full screen'}, "
+          f"crosshair fov {fov_aspect or 'default'}, debug={values['DEBUG']}")
     for path in sorted(SRC.rglob("*")):
         if not path.is_file():
             continue
@@ -153,5 +158,8 @@ if __name__ == "__main__":
                     help="HUD size multiplier; 1.0 = same size as a 16:9 screen of the same width")
     ap.add_argument("--hud-aspect", default=ls.get("hud_aspect", ""),
                     help="constrain the HUD to the largest centered W:H region of the screen, e.g. 1:1")
+    ap.add_argument("--fov-aspect", type=float,
+                    default=float(ls.get("gameinfo_convars", {}).get("r_aspectratio", 0) or 0),
+                    help="your r_aspectratio (default: from local_settings.json), sizes the crosshair; 0 = default FOV")
     a = ap.parse_args()
-    build(a.test, a.ui_size, a.hud_aspect)
+    build(a.test, a.ui_size, a.hud_aspect, fov_aspect=a.fov_aspect)

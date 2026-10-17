@@ -5,7 +5,7 @@ the same width)."""
 import pathlib, shutil, zipfile
 from build import build, ROOT
 
-SIZES = ["0.8", "0.9", "1.0", "1.1", "1.2"]
+SIZES = [f"{s / 10:.1f}" for s in range(5, 16)]   # 0.5 ... 1.5
 dist = ROOT / "build" / "dist"
 if dist.exists():
     shutil.rmtree(dist)

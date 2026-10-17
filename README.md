@@ -27,7 +27,18 @@ canvas, so size 1.0 changes nothing there and the other sizes simply scale the v
 `src/panorama/styles/npc_icons.css` carries the one layout fix that is plain CSS: the health
 bar, anchored to the left edge at its exact vanilla position (315 on a 1920 canvas, 199.5 on
 16:10's 1728 canvas) instead of "centered, then offset by a fixed margin", which drifts onto the
-stat circles when the canvas is narrower.
+stat circles when the canvas is narrower. Below size 1.0 the script keeps the bar next to the
+lower-left group, which the engine caps to a centered 1920px band on wider canvases.
+
+While the shop is open the lower-left group (quick-buy column, souls, items) is shown at the
+shop's scale, so the quick-buy matches the shop at every UI size.
+
+The crosshair is not scaled with the HUD. The game places the spread pips in UI units and does
+not account for UI scaling (or for `r_aspectratio`), so the crosshair gets its own scale, chosen
+from in-game pellet tests so the pips show the real spread: vanilla on 16:9 / 16:10 / 21:9,
+round at vertical scale x 1440/1920 on narrow screens (vanilla stretches it there and overstates
+the spread about 2x). Private builds also correct for the personal `r_aspectratio`
+(`--fov-aspect`, read from `local_settings.json`).
 
 The script is hosted by overriding two small, always-present layouts
 (`hud_data_feed.xml`, `citadel_dashboard_footer_bar.xml`), which only add a `<scripts>`
@@ -42,10 +53,11 @@ python install.py                                # copy into the game + fix game
 python release.py                                # zips for several sizes in build/dist/
 ```
 
-`--ui-size` scales the whole HUD (0.8 smaller ... 1.2 larger). `--hud-aspect 1:1` confines the
+`--ui-size` scales the whole HUD (0.5 smaller ... 1.5 larger; release.py ships 0.5 to 1.5 in 0.1 steps). `--hud-aspect 1:1` confines the
 HUD to the largest centered 1:1 (or any W:H) region of the screen (the Esc menu's dark backdrop
 still covers the whole screen; its contents stay in the region). `--test` keeps an on-screen
-debug label with the measured scales. Without arguments, build.py reads `local_settings.json`.
+debug label with the measured scales. `--fov-aspect` is your `r_aspectratio` (0 = default FOV),
+used only for the crosshair size. Without arguments, build.py reads `local_settings.json`.
 
 No Valve SDK is needed: `build.py` writes the compiled resource containers itself
 (stylesheets and layouts in the legacy plain-text form, scripts as plain text).
