@@ -172,21 +172,32 @@ def header():
     img.convert("RGB").save(os.path.join(HERE, "images", "header.jpg"), quality=90)
 
 
+# The bottom-left of each 2880x1620 (16:9) frame: the whole lower-left HUD, the health bar and ability 1, ending in the
+# gap before ability 2 (which sits further left the larger the HUD), so nothing is cut. Same top and height for all,
+# so the panels share one scale and the sizes compare directly.
+CORNERS_169 = {"s07_169_hud": (0, 600, 1346, 1620), "m_169_hud": (0, 600, 1306, 1620),
+               "s13_169_hud": (0, 600, 1266, 1620)}
+
+
 def sizes():
-    """16:9 at size 0.7 / 1.0 / 1.3: the left third of each frame (the health and items corner), side by side."""
-    img = Image.new("RGBA", (W, H))
-    cw = W // 3
-    for i, (k, lbl) in enumerate((("s07_169_hud", "Size 0.7"), ("m_169_hud", "Size 1.0 = vanilla"),
-                                  ("s13_169_hud", "Size 1.3"))):
-        im = shot(k)
-        crop = im.crop((0, 0, round(im.height * cw / H), im.height)).resize((cw, H), Image.LANCZOS)
-        img.paste(crop, (i * cw, 0))
-        label(img, lbl, (i * cw + cw // 2, 70), 52, anchor="mm")
-    d = ImageDraw.Draw(img)
-    for i in (1, 2):
-        d.line((i * cw, 0, i * cw, H), fill=(0, 0, 0), width=4)
-    label(img, "16:9: pick your HUD size (0.5 to 1.5)", (W // 2, H // 2 - 80), 52, anchor="mm")
-    save(img, "06_sizes.jpg")
+    """16:9 at size 0.7 / 1.0 / 1.3: the bottom-left corner of each frame as separate panels on a blurred backdrop."""
+    img = backdrop("m_169_hud")
+    top, margin, gap = 150, 30, 30
+    items = (("s07_169_hud", "Size 0.7"), ("m_169_hud", "Size 1.0 = vanilla"), ("s13_169_hud", "Size 1.3"))
+    widths = [CORNERS_169[k][2] - CORNERS_169[k][0] for k, _ in items]
+    ch = CORNERS_169["m_169_hud"][3] - CORNERS_169["m_169_hud"][1]
+    s = min((W - 2 * margin - 2 * gap) / sum(widths), (H - top - margin) / ch)
+    ph = round(ch * s)
+    x = (W - round(sum(widths) * s) - 2 * gap) // 2
+    y = top + (H - top - margin - ph) // 2
+    for (k, lbl), cw in zip(items, widths):
+        pw = round(cw * s)
+        p = shot(k).crop(CORNERS_169[k]).resize((pw, ph), Image.LANCZOS).convert("RGBA")
+        shadowed_paste(img, p, (x, y))
+        label(img, lbl, (x + 16, y + 16), 40)
+        x += pw + gap
+    label(img, "16:9: pick your HUD size (0.5 to 1.5)", (W // 2, top // 2), 56, anchor="mm")
+    save(img, "05_sizes.jpg")
 
 
 def thumbs(img):
@@ -206,9 +217,6 @@ if __name__ == "__main__":
          "4:3 shop: Quick Buy no longer covers the items")
     pair(("v_54_hud", "m_54_hud"), ("Vanilla", "With mod"), "04_54_hud.jpg",
          "5:4: health bar back, HUD no longer stretched")
-    pair(("v_98_hud", "m_98_hud"), ("Vanilla", "With mod"), "05_98_hud.jpg", "Any narrower screen (9:8 shown)")
     sizes()
-    pair(("v_98_menu", "m_98_menu"), ("Vanilla", "With mod"), "07_98_menu.jpg", "Menus too (9:8 shown)",
-         bright=1.3)
     if "--thumbs" in sys.argv:
         thumbs(tile)
