@@ -1,7 +1,7 @@
 /* ---------------------------------------------------------------------------
-   Deadlock 9:8 HUD fix - overrides panorama/styles/npc_icons.vcss
+   Deadlock narrow-display HUD fix - overrides panorama/styles/npc_icons.vcss
    The first block is the vanilla file content (keep in sync with the game).
-   Everything below "9x8 HUD" is the mod. Rules are scoped to the aspect
+   Everything below "NARROW-DISPLAY HUD" is the mod. Rules are scoped to the aspect
    ratio class the engine puts on the HUD root, so 16:9 players are untouched.
    --------------------------------------------------------------------------- */
 .precache
@@ -17,53 +17,25 @@
 	background-image: url("s2r://panorama/images/npcs/core_psd.vtex");
 }
 
-/* FALLBACK:BEGIN - aspect-specific static numbers, only in builds with --aspect fallback */
-/* ======================= NARROW-DISPLAY HUD : WHOLE-HUD RESCALE ======================= */
-/* Measured on 2880x2560 (9:8): the engine applies the AspectRatio4x3 class and lays the HUD
-   out on a 1440x1080 canvas, then stretches it to the screen (X scale 2.00, Y scale 2.37),
-   so everything is too tall and the canvas is far narrower than the 1920px the 16:9 layout
-   assumes.
-
-   Fix: scale the HUD's top-level containers so their virtual canvas becomes 1920 px wide
-   with the screen's true aspect ratio, and enlarge them so they still cover the screen.
-   Built for {{ASPECT}}:  ui-scale {{SCALE_X}} x {{SCALE_Y}}, size {{WIDTH}} x {{HEIGHT}}.
-   The HUD root itself (CitadelHud) ignores stylesheet ui-scale (the engine sets it inline),
-   so this targets each of its direct children from hud.xml. */
-.AspectRatio4x3 .HudCore,
-.AspectRatio4x3 #HudExperimentsContainer,
-.AspectRatio4x3 .HudTakeovers,
-.AspectRatio4x3 #EscapeMenu,
-.AspectRatio4x3 #PopupManager,
-.AspectRatio4x3 #ContextMenuManager,
-.AspectRatio4x3 #TooltipManager,
-.AspectRatio4x3 .RadialsRoot,
-.AspectRatio4x3 #LoadInFadeCover
-{
-	ui-scale: {{SCALE_X}} {{SCALE_Y}} 100%;
-	width: {{WIDTH}};
-	height: {{HEIGHT}};
-	horizontal-align: center;
-	vertical-align: center;
-}
-
-/* Edge-anchored containers that are not full-screen: only rescale, keep their own size. */
-.AspectRatio4x3 #CommendNotification,
-.AspectRatio4x3 #ToastManager,
-.AspectRatio4x3 #CitadelPartyContainer,
-.AspectRatio4x3 #CitadelHudCombatLog,
-.AspectRatio4x3 HudPerfStatsBasics
-{
-	ui-scale: {{SCALE_X}} {{SCALE_Y}} 100%;
-}
-/* FALLBACK:END */
-
-/* ======================= NARROW-DISPLAY HUD : LAYOUT FIX (all builds) ======================= */
-/* Vanilla positions the health bar as "centered, then pushed left by 1290px", which only lands in
-   the right place on a 1920px-wide canvas. With a larger UI size the canvas is narrower and the bar
-   collides with the left-anchored stat circles. Anchor it to the left edge at its 16:9 position. */
-.AspectRatio4x3 .HudCore #health_and_abilities_container
+/* ======================= NARROW-DISPLAY HUD : LAYOUT FIX ======================= */
+/* The whole-HUD rescale is done by scripts/narrowhud.vts; this file only carries layout fixes. */
+/* Vanilla positions the health bar as "centered, then pushed left by a fixed margin", which only
+   lands in the right place on the canvas width it was written for. With a UI size above 1 the
+   canvas is narrower and the bar collides with the left-anchored stat circles. Anchor it to the
+   left edge at exactly its vanilla position, so UI size 1.0 on 16:9 / 16:10 looks unchanged.
+   Measured in game (debug label "hb x="): 315 on 16:9's 1920 canvas, 295.5 on a 1920 canvas with
+   the 16:10 rule, i.e. 199.5 on 16:10's own 1728 canvas. 21:9 is left vanilla. */
+.AspectRatio4x3 .HudCore #health_and_abilities_container,
+.AspectRatio16x9 .HudCore #health_and_abilities_container
 {
 	horizontal-align: left;
-	margin-left: 190px;
+	margin-left: 315px;
+	margin-right: 0px;
+}
+
+.AspectRatio16x10 .HudCore #health_and_abilities_container
+{
+	horizontal-align: left;
+	margin-left: 199.5px;
 	margin-right: 0px;
 }

@@ -83,15 +83,16 @@
         if (rsb) { rsb.style.marginRight = (-extX).toFixed(2) + "px"; rsb.style.width = (720 + extX).toFixed(2) + "px"; }
     }
 
-    // The shop's layout is built for a 1920px-wide canvas. With UI Size above 1 the HUD canvas is
-    // narrower than that and the shop would collide with the quick-buy panel, so the shop keeps the
-    // largest size that still fits: its own canvas is held at 1920px wide.
-    // The shop is also laid out for 16:9 (1920x1080): on a taller canvas it leaves the bottom empty,
-    // so give it a 1920x1080 box centered vertically, and move the quick-buy column down with it.
-    function fixShop(hudCore, cw, ch) {
+    // The shop's layout is built for the reference canvas width (1920px, or the engine's own width on
+    // an unstretched screen, e.g. 1728 on 16:10). With UI Size above 1 the HUD canvas is narrower than
+    // that and the shop would collide with the quick-buy panel, so the shop keeps the largest size
+    // that still fits: its own canvas is held at the reference width.
+    // The shop is also laid out for a 1080px-tall canvas: on a taller canvas it leaves the bottom empty,
+    // so give it a 1080px-tall box centered vertically, and move the quick-buy column down with it.
+    function fixShop(hudCore, cw, ch, refW) {
         var shop = hudCore.FindChild("CitadelHudHeroShop");
         if (!shop) { return; }
-        var s = Math.min(1, cw / 1920);                 // shop scale relative to the HUD canvas
+        var s = Math.min(1, cw / refW);                 // shop scale relative to the HUD canvas
         var boxH = Math.min(ch / s, 1080);              // shop canvas height in its own units (16:9 box)
         var offset = Math.max(0, (ch - boxH * s) / 2);  // vertical centering, in HudCore units
         // the whole shop (backdrop included) is the centered box; the user prefers it this way
@@ -113,8 +114,13 @@
             if (HUD_ASPECT <= lw / lh) { rw = lh * HUD_ASPECT; } else { rh = lw / HUD_ASPECT; }
         }
         var ox = (lw - rw) / 2, oy = (lh - rh) / 2;                       // region offset, real px
-        // reference: the uniform scale a 16:9 layout gets at the region width; never enlarge wide screens
-        var tRef = Math.min(sx, sy, rw / 1920);
+        // reference canvas width: narrow screens are stretched (sx != sy) and get the 1920px a 16:9
+        // layout expects; unstretched screens (16:9, 16:10, 21:9) keep the engine's own canvas width,
+        // so UI Size 1.0 leaves them exactly vanilla
+        var stretched = Math.abs(sx / sy - 1) > 0.01;
+        var refW = stretched ? 1920 : lw / sx;
+        // reference scale: that canvas fitted to the region width; never enlarge
+        var tRef = Math.min(sx, sy, rw / refW);
         var ux = tRef * uiSize / sx, uy = tRef * uiSize / sy;
         var key = [sx, sy, lw, lh, uiSize].join("|");
         var changed = force || key !== last;
@@ -137,6 +143,17 @@
                         var bgp = c.FindChild("EscapeBackground");
                         if (bgp) { info.push("escbg x=" + num(bgp.actualxoffset) + " w=" + num(bgp.actuallayoutwidth)); }
                     }
+                    if (k === "HudCore") {
+                        // health bar position in HudCore canvas units (offsets summed up to HudCore)
+                        var hb = c.FindChildTraverse("health_and_abilities_container");
+                        if (hb) {
+                            var hx = 0, p = hb;
+                            while (p && p !== c) { hx += p.actualxoffset; p = p.GetParent(); }
+                            var u = sx * ux;
+                            info.push("\nhb x=" + (hx / u).toFixed(1) + " w=" + (hb.actuallayoutwidth / u).toFixed(1) +
+                                      " canvas=" + (rw / u).toFixed(0) + "x" + (rh / (sy * uy)).toFixed(0));
+                        }
+                    }
                 } catch (e) { info.push(k + " diag-error " + e); }
             }
             var cx = ux, cy = uy;
@@ -157,7 +174,7 @@
                 c.style.marginTop = (oy / sy).toFixed(2) + "px";
                 c.style.marginBottom = (oy / sy).toFixed(2) + "px";
                 if (k === "EscapeMenu") { fixEscapeBackdrop(c, lw, lh, ox, oy, sx, sy, ux, uy); }
-                if (k === "HudCore") { fixShop(c, rw / sx / ux, rh / sy / uy); }
+                if (k === "HudCore") { fixShop(c, rw / sx / ux, rh / sy / uy, refW); }
             } else if (ox > 0 || oy > 0) {
                 // edge-anchored containers: keep them inside the region (margins are in the root's units)
                 c.style.marginLeft = (ox / sx).toFixed(2) + "px";

@@ -2,9 +2,9 @@
 citadel/addons. Safe to re-run after every game update (Steam verifies/overwrites gameinfo.gi,
 which drops the addons line).
 
-    python install.py [ASPECT] [--aspect-convar VALUE]
+    python install.py [--aspect-convar VALUE]
 
-ASPECT selects build/<aspect>/pak01_dir.vpk (default 9:8).
+Installs build/mod/pak01_dir.vpk (what build.py produces).
 --aspect-convar sets r_aspectratio in gameinfo.gi's ConVars block (the mechanism performance
 configs use); pass "" to remove it again. This is NOT part of the HUD mod, it changes the
 game's field of view.
@@ -19,9 +19,7 @@ GAME = pathlib.Path(r"C:/Games/Steam/steamapps/common/Deadlock/game/citadel")
 ROOT = pathlib.Path(__file__).resolve().parent
 LOCAL = ROOT / "local_settings.json"
 SETTINGS = json.loads(LOCAL.read_text(encoding="utf-8")) if LOCAL.exists() else {}
-ARGS = [a for a in sys.argv[1:] if not a.startswith("--")]
-ASPECT = ARGS[0] if ARGS else SETTINGS.get("aspect", "9:8")
-VPK = ROOT / "build" / ASPECT.replace(":", "x") / "pak01_dir.vpk"
+VPK = ROOT / "build" / "mod" / "pak01_dir.vpk"
 
 
 def patch_gameinfo():

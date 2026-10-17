@@ -11,13 +11,12 @@ if dist.exists():
     shutil.rmtree(dist)
 dist.mkdir(parents=True)
 for size in SIZES:
-    vpk = build("9:8", False, float(size), "", fallback=False)
     name = f"deadlock-narrow-hud-size{size}"
     d = dist / name
-    d.mkdir()
-    shutil.copy2(vpk, d / "pak01_dir.vpk")
+    vpk = build(False, float(size), "", out_dir=d)
+    shutil.rmtree(d / "stage")
     shutil.copy2(ROOT / "INSTALL.txt", d / "INSTALL.txt")
     with zipfile.ZipFile(dist / f"{name}.zip", "w", zipfile.ZIP_DEFLATED) as z:
-        z.write(d / "pak01_dir.vpk", "pak01_dir.vpk")
+        z.write(vpk, "pak01_dir.vpk")
         z.write(d / "INSTALL.txt", "INSTALL.txt")
     print("->", dist / f"{name}.zip")

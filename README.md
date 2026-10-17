@@ -20,8 +20,14 @@ top-level containers so the UI becomes uniform (un-stretched) and as large as a 
 of the same width would get, times a `UI_SIZE` factor baked in at build time. The containers
 are enlarged by the inverse so they still cover the screen.
 
-`src/panorama/styles/npc_icons.css` and `base.css` carry the same correction as static CSS
-(for 9:8 only) as a fallback if the script ever fails to load.
+On screens the engine does not stretch (16:9, 16:10, 21:9) the script keeps the engine's own
+canvas, so size 1.0 changes nothing there and the other sizes simply scale the vanilla HUD
+(checked in game on 16:9 and 16:10; 21:9 untested).
+
+`src/panorama/styles/npc_icons.css` carries the one layout fix that is plain CSS: the health
+bar, anchored to the left edge at its exact vanilla position (315 on a 1920 canvas, 199.5 on
+16:10's 1728 canvas) instead of "centered, then offset by a fixed margin", which drifts onto the
+stat circles when the canvas is narrower.
 
 The script is hosted by overriding two small, always-present layouts
 (`hud_data_feed.xml`, `citadel_dashboard_footer_bar.xml`), which only add a `<scripts>`
@@ -31,16 +37,15 @@ include; small files survive game patches better than the 4000-line `hud.vcss`.
 
 ```bash
 pip install vpk
-python build.py --aspect 9:8 --ui-size 1.0 --hud-aspect 1:1   # private 9:8 build -> build/9x8/pak01_dir.vpk
-python install.py 9:8                           # copy into the game + fix gameinfo.gi
-python release.py                               # zips for several sizes in build/dist/
+python build.py --ui-size 1.0 --hud-aspect 1:1   # -> build/mod/pak01_dir.vpk
+python install.py                                # copy into the game + fix gameinfo.gi
+python release.py                                # zips for several sizes in build/dist/
 ```
 
 `--ui-size` scales the whole HUD (0.8 smaller ... 1.2 larger). `--hud-aspect 1:1` confines the
 HUD to the largest centered 1:1 (or any W:H) region of the screen (the Esc menu's dark backdrop
-still covers the whole screen; its contents stay in the region). `--no-fallback` ships the
-script only, with no aspect-specific CSS (used for the shared packages). `--test` keeps an
-on-screen debug label with the measured scales. `--aspect` only affects the CSS fallback values.
+still covers the whole screen; its contents stay in the region). `--test` keeps an on-screen
+debug label with the measured scales. Without arguments, build.py reads `local_settings.json`.
 
 No Valve SDK is needed: `build.py` writes the compiled resource containers itself
 (stylesheets and layouts in the legacy plain-text form, scripts as plain text).
@@ -63,7 +68,8 @@ Steam launch options (`-w 2880 -h 2560`), restart the game.
 ## Known limits
 
 - Resolution and aspect ratio cannot be made selectable in Video settings: the game's aspect
-  handler only knows three buckets and the engine ignores an unlisted mode saved in
+  handler has four buckets (16:9, 16:10, 21:9, and a hidden `CitadelSetAspectRatio(3)` that
+  covers 4:3 and 5:4), none of them 9:8, and the engine ignores an unlisted mode saved in
   `video.txt`, so launch options stay the way to set a narrow resolution.
 - No in-game UI Size slider. A runtime slider works for live preview (convar-bound
   `CitadelSettingsSlider` with `updateonvaluechange`), but nothing the UI can write survives
