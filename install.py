@@ -4,7 +4,9 @@ which drops the addons line).
 
     python install.py [--aspect-convar VALUE]
 
-Installs build/mod/pak01_dir.vpk (what build.py produces).
+Installs build/mod/pak01_dir.vpk (what build.py produces) as addons/pak99_dir.vpk: Deadlock Mod
+Manager names the mods it manages pak01, pak02, ... (lowest free number), so a high number keeps
+the two from overwriting each other.
 --aspect-convar sets r_aspectratio in gameinfo.gi's ConVars block (the mechanism performance
 configs use); pass "" to remove it again. This is NOT part of the HUD mod, it changes the
 game's field of view.
@@ -20,6 +22,7 @@ ROOT = pathlib.Path(__file__).resolve().parent
 LOCAL = ROOT / "local_settings.json"
 SETTINGS = json.loads(LOCAL.read_text(encoding="utf-8")) if LOCAL.exists() else {}
 VPK = ROOT / "build" / "mod" / "pak01_dir.vpk"
+TARGET = "pak99_dir.vpk"
 
 
 def patch_gameinfo():
@@ -64,11 +67,17 @@ def set_convar(name: str, value: str):
 def install_vpk():
     addons = GAME / "addons"
     addons.mkdir(exist_ok=True)
-    if VPK.exists():
-        shutil.copy2(VPK, addons / VPK.name)
-        print(f"copied {VPK.name} -> {addons}")
-    else:
+    if not VPK.exists():
         print(f"no {VPK} yet, run build.py first")
+        return
+    dmm = addons / ".dmm.json"
+    if dmm.exists():
+        managed = {v for m in json.loads(dmm.read_text(encoding="utf-8")).get("mods", {}).values()
+                   for v in m.get("currentVpks", [])}
+        if TARGET in managed:
+            sys.exit(f"{TARGET} belongs to a Deadlock Mod Manager mod; pick another TARGET in install.py")
+    shutil.copy2(VPK, addons / TARGET)
+    print(f"copied {VPK.name} -> {addons / TARGET}")
 
 
 if __name__ == "__main__":
