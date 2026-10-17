@@ -1,8 +1,9 @@
 /* ---------------------------------------------------------------------------
-   Deadlock narrow-display HUD fix - overrides panorama/styles/npc_icons.vcss
+   HUD Resize & 4:3 / 5:4 Fix - overrides panorama/styles/npc_icons.vcss
    The first block is the vanilla file content (keep in sync with the game).
-   Everything below "NARROW-DISPLAY HUD" is the mod. Rules are scoped to the aspect
-   ratio class the engine puts on the HUD root, so 16:9 players are untouched.
+   Everything below "HUD RESIZE" is the mod. Rules are scoped to the aspect ratio
+   classes the engine puts on the HUD root; at UI size 1.0 they reproduce the
+   vanilla layout on 16:9 and 16:10.
    --------------------------------------------------------------------------- */
 .precache
 {
@@ -17,14 +18,15 @@
 	background-image: url("s2r://panorama/images/npcs/core_psd.vtex");
 }
 
-/* ======================= NARROW-DISPLAY HUD : LAYOUT FIX ======================= */
+/* ======================= HUD RESIZE : LAYOUT FIX ======================= */
 /* The whole-HUD rescale is done by scripts/narrowhud.vts; this file only carries layout fixes. */
 /* Vanilla positions the health bar as "centered, then pushed left by a fixed margin", which only
    lands in the right place on the canvas width it was written for. With a UI size above 1 the
    canvas is narrower and the bar collides with the left-anchored stat circles. Anchor it to the
    left edge at exactly its vanilla position, so UI size 1.0 on 16:9 / 16:10 looks unchanged.
    Measured in game (debug label "hb x="): 315 on 16:9's 1920 canvas, 295.5 on a 1920 canvas with
-   the 16:10 rule, i.e. 199.5 on 16:10's own 1728 canvas. 21:9 is left vanilla. */
+   the 16:10 rule, i.e. 199.5 on 16:10's own 1728 canvas. 21:9 is left vanilla. Below UI size 1.0
+   the script (fixHealthBar) adds the offset of the lower-left group, which the engine centers. */
 .AspectRatio4x3 .HudCore #health_and_abilities_container,
 .AspectRatio16x9 .HudCore #health_and_abilities_container
 {

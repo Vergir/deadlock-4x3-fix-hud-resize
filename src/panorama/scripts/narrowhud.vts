@@ -1,13 +1,15 @@
 "use strict";
-// Narrow-display HUD: un-stretches and rescales the Panorama UI.
-// The engine lays "4x3-class" screens out on a 1440x1080 canvas and stretches it to the
-// screen, so the X and Y scales differ. This script measures the real scales on the UI root
-// and rescales the root's top-level containers so the UI is uniform and as large as it would
-// be on a 16:9 screen of the same width, times UI_SIZE (a build-time setting).
+// HUD Resize & 4:3 / 5:4 Fix: un-stretches and resizes the Panorama UI.
+// The engine lays screens narrower than 16:10 out on a 1440x1080 canvas and stretches it to the
+// screen, so the X and Y scales differ. This script measures the real scales on the UI root and
+// rescales the root's top-level containers: on narrow screens the UI becomes uniform and as large as
+// on a 16:9 screen of the same width; on 16:9, 16:10 and 21:9 it keeps the engine's own canvas. Both
+// are multiplied by UI_SIZE (a build-time setting). The shop, the health bar and the crosshair get
+// their own corrections below. Runs in the in-game HUD and in the main menu.
 (function () {
     var TAG = "[NarrowHUD]";
     var DEBUG = {{DEBUG}};
-    var uiSize = {{UI_SIZE}};          // build-time UI size (1.0 = same size as a 16:9 screen of this width)
+    var uiSize = {{UI_SIZE}};          // build-time UI size; 1.0 = vanilla size on 16:9 and 16:10
     var HUD_ASPECT = {{HUD_ASPECT}};   // 0 = use the whole screen; e.g. 1.0 = largest centered 1:1 square
     var FOV_ASPECT = {{FOV_ASPECT}};   // personal r_aspectratio (private builds only) for the crosshair; 0 = default
     var FULLSCREEN = { HudCore: 1, HudExperimentsContainer: 1, HudTakeovers: 1, EscapeMenu: 1, PopupManager: 1,
@@ -128,8 +130,7 @@
         var s = Math.min(1, cw / refW);                 // shop scale relative to the HUD canvas
         var boxH = Math.min(ch / s, 1080);              // shop canvas height in its own units (16:9 box)
         var offset = Math.max(0, (ch - boxH * s) / 2);  // vertical centering, in HudCore units
-        // the whole shop (backdrop included) is the centered box; the user prefers it this way (a full-screen
-        // backdrop with the content in the box was tried 2026-10-18 and rejected)
+        // the whole shop, backdrop included, is the centered box
         shop.style.uiScale = (s * 100).toFixed(4) + "% " + (s * 100).toFixed(4) + "% 100%";
         shop.style.width = (cw / s).toFixed(2) + "px";
         shop.style.height = boxH.toFixed(2) + "px";
@@ -141,9 +142,9 @@
     }
 
     // The game places the crosshair pips (bullet spread) and ability reticles in UI units and ignores both
-    // our rescale and r_aspectratio (measured 2026-10-18: same pip translate at sizes 0.5 / 1.5 and with /
-    // without r_aspectratio). So #crosshair gets its own uniform scale t (real px per unit), chosen so the pips
-    // match the real spread:
+    // our rescale and r_aspectratio (measured: the same pip translate at sizes 0.5 and 1.5, and with and
+    // without r_aspectratio). So #crosshair gets its own uniform scale t (real px per unit), chosen with
+    // pellet tests so the pips match the real spread:
     //  - 16:9 / 16:10 / 21:9: the engine's own scale, i.e. exactly vanilla.
     //  - narrow (4:3 class): vanilla stretches it (2.00 x 2.37 on 9:8) and overstates the spread. Measured at
     //    rest: 24 units on 9:8 vs 18 on 16:9 for a world drawn 1.58x larger (Hor+), which fits
@@ -250,19 +251,18 @@
         }
         if (changed) { log("unmatched root children: " + others.join(" ")); }
         if (DEBUG && dbg) {
-            // two lines: the scale state, and (HUD only) canvas size + health bar / lower-left group x in canvas units
+            // line 1: the scale state; line 2 (HUD): canvas size, health bar and lower-left group x in canvas
+            // units; line 3 (HUD): real px per unit at a crosshair pip, the target scale and the game's pip offset
             var u = sx * ux, extra = "canvas=" + (rw / u).toFixed(0) + "x" + (rh / (sy * uy)).toFixed(0);
             if (hudCore) {
                 var hb = hudCore.FindChildTraverse("health_and_abilities_container");
                 var sm = hudCore.FindChildTraverse("StatsAndModsContainer");
                 if (hb) { extra += "  hb x=" + (offsetIn(hb, hudCore) / u).toFixed(1); }
                 if (sm) { extra += "  sm x=" + (offsetIn(sm, hudCore) / u).toFixed(1); }
-                // crosshair pips (placed by game code): real-pixel gap and what the game sets on them
                 try {
                     var cr = hudCore.FindChildTraverse("crosshair");
-                    var rp = cr && cr.FindChildTraverse("RightPip"), lp = cr && cr.FindChildTraverse("LeftPip");
+                    var rp = cr && cr.FindChildTraverse("RightPip");
                     if (rp) {
-                        // real px per unit at the pip (should equal the engine's own scale) and the game's translate
                         extra += "\npip scale=" + Number(rp.actualuiscale_x).toFixed(3) + "," + Number(rp.actualuiscale_y).toFixed(3) +
                                  " target=" + crosshairT.toFixed(3) + " fov=" + crosshairFov.toFixed(3) + " tr=" + rp.style.transform;
                     } else { extra += "\npips not found"; }

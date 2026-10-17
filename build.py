@@ -1,37 +1,31 @@
-"""Build the Deadlock narrow-display HUD addon.
+"""Build the HUD Resize & 4:3 / 5:4 Fix addon.
 
-Usage:  python build.py [--ui-size 1.0] [--hud-aspect W:H] [--test]
-  --test     keep the on-screen debug label
+Usage:  python build.py [--ui-size 1.0] [--hud-aspect W:H] [--fov-aspect R] [--test]
+  --ui-size     HUD size, 1.0 = vanilla size on 16:9 (0.5 ... 1.5 are shipped)
+  --hud-aspect  confine the HUD to the largest centered W:H region (personal builds)
+  --fov-aspect  your r_aspectratio, only used to size the crosshair (personal builds)
+  --test        keep the on-screen debug label
+Without arguments the defaults come from local_settings.json when it exists.
 
-Every file under src/panorama is a template: {{UI_SIZE}}, {{HUD_ASPECT}}, {{DEBUG}} are filled
-in, then the file is compiled into a Source 2 Panorama resource and packed into
-build/mod/pak01_dir.vpk. The script measures the screen itself, so the same build works on any
-display narrower than 16:10; the options only change the HUD size and region.
+Every file under src/panorama is a template: {{UI_SIZE}}, {{HUD_ASPECT}}, {{FOV_ASPECT}},
+{{DEBUG}} are filled in, then the file is compiled into a Source 2 Panorama resource and packed
+into build/mod/pak01_dir.vpk. The script measures the screen itself, so the same build works on
+any screen shape.
 
-Compiled resource layout (as read by ValveResourceFormat):
+Compiled resource layout (as read by ValveResourceFormat). Valve ships layouts as a KV3 "LaCo"
+block; the engine also accepts the legacy plain-text form used here.
   header: u32 file_size, u16 header_version(12), u16 resource_version,
           u32 block_table_offset (relative to this field), u32 block_count
   table:  per block: 4-char type, u32 data_offset (relative to this field), u32 size
   .vcss_c (v3): DATA = u32 crc32(text), u16 0, text
-  .vxml_c (v3): DATA = u32 crc32(text), u16 0, text          ("text" mode, legacy)
-                DATA = u32 0, u16 0 ; LaCo = text KV3 layout AST ("laco" mode, what Valve ships)
+  .vxml_c (v3): DATA = u32 crc32(text), u16 0, text
   .vts_c  (v2): DATA = raw script text
 """
 import argparse, pathlib, re, shutil, struct, zlib
 import vpk
-from xml2laco import xml_to_laco
 
 ROOT = pathlib.Path(__file__).resolve().parent
 SRC = ROOT / "src"
-
-# Which encoding to use for each layout override. Valve ships "laco"; "text" is the legacy
-# plain-XML form. Both are being evaluated.
-LAYOUT_MODE = {
-    "panorama/layout/hud_data_feed.xml": "text",
-    "panorama/layout/citadel_dashboard_footer_bar.xml": "text",
-}
-DEFAULT_LAYOUT_MODE = "laco"
-
 DEFAULT_OUT = ROOT / "build" / "mod"
 
 
@@ -84,16 +78,10 @@ def compile_file(rel: str, text: str) -> tuple[str, bytes]:
     if ext == ".css":
         return rel[:-4] + ".vcss_c", pack_resource(3, [(b"DATA", data_block(raw))])
     if ext == ".xml":
-        mode = LAYOUT_MODE.get(rel, DEFAULT_LAYOUT_MODE)
-        if mode == "text":
-            return rel[:-4] + ".vxml_c", pack_resource(3, [(b"DATA", data_block(raw))])
-        laco = xml_to_laco(text).encode("utf-8")
-        return rel[:-4] + ".vxml_c", pack_resource(3, [(b"DATA", data_block(b"")), (b"LaCo", laco)])
+        return rel[:-4] + ".vxml_c", pack_resource(3, [(b"DATA", data_block(raw))])
     if ext == ".vts":
         syntax_check(rel, raw)
         return rel + "_c", pack_resource(2, [(b"DATA", raw)])
-    if ext == ".js":
-        return rel[:-3] + ".vjs_c", pack_resource(4, [(b"DATA", raw)])
     raise ValueError(rel)
 
 
@@ -111,9 +99,7 @@ def syntax_check(rel: str, raw: bytes) -> None:
         raise SystemExit(f"JS syntax error in {rel}: {r.stderr}")
 
 
-def render(text: str, values: dict, test: bool) -> str:
-    if not test:
-        text = re.sub(r"/\* TEST BUILD:.*?\*/\s*[^{}]+\{[^}]*\}\s*", "", text, flags=re.S)
+def render(text: str, values: dict) -> str:
     return re.sub(r"\{\{([A-Z_]+)\}\}", lambda m: values[m.group(1)], text)
 
 
@@ -129,8 +115,8 @@ def build(test: bool, ui_size: float = 1.0, hud_aspect: str = "", out_dir: pathl
         if not path.is_file():
             continue
         rel = path.relative_to(SRC).as_posix()
-        if path.suffix.lower() in (".css", ".xml", ".vts", ".js"):
-            out_rel, data = compile_file(rel, render(path.read_text(encoding="utf-8"), values, test))
+        if path.suffix.lower() in (".css", ".xml", ".vts"):
+            out_rel, data = compile_file(rel, render(path.read_text(encoding="utf-8"), values))
         else:
             out_rel, data = rel, path.read_bytes()
         dest = stage / out_rel

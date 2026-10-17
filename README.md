@@ -94,8 +94,5 @@ Steam launch options (`-w 2880 -h 2560`), restart the game.
 ## Repository layout
 
 - `src/panorama/` – mod sources (templates; `{{UI_SIZE}}`, `{{DEBUG}}` etc. filled by build.py)
-- `build.py`, `xml2laco.py`, `install.py`, `release.py` – tooling
-- `extracted/` – decompiled vanilla UI for reference (not shipped)
-- `tools/vrf-cli/` – Source 2 Viewer CLI used for extraction
-- `ref/` – other open-source Deadlock HUD mods, for reference
+- `build.py`, `install.py`, `release.py` – tooling
 - `gameinfo.gi.backup-original`, `video.txt.backup-original` – untouched copies of game configs

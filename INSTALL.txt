@@ -1,5 +1,5 @@
-Deadlock Narrow-Display HUD fix
-===============================
+HUD Resize & 4:3 / 5:4 Fix (Deadlock)
+=====================================
 Fixes the stretched, oversized HUD on screens narrower than 16:10 (9:8, 5:4, 4:3, 1:1 ...).
 Data-only Panorama (CSS + layout + script) addon. No code injection.
 

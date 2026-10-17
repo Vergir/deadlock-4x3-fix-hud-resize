@@ -1,13 +1,15 @@
 # build outputs (release zips are attached to GitHub releases / GameBanana instead)
 build/
 
-# decompiled vanilla game files, third-party mods and tools (large, not ours)
-extracted/
-ref/
-tools/
-
 # local game config backups
 *.backup-original
 
 __pycache__/
-exceptions.txt
+
+# personal notes and settings, kept locally only (README.md is the only tracked doc)
+*.md
+!README.md
+local_settings.json
+
+# raw screenshots for the GameBanana page (processed images are uploaded, not committed)
+docs/pics/
