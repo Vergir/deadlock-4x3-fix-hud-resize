@@ -6,7 +6,7 @@ Play Deadlock on a 4:3, 5:4 or other narrow screen with a complete, un-stretched
 HUD size on any screen. Only the interface changes; gameplay, resolution and field of view stay as
 they are.
 
-Download: [GameBanana](https://gamebanana.com/) · [GitHub releases](https://github.com/Vergir/deadlock-hud-resize/releases/latest)
+Download: [GameBanana](https://gamebanana.com/mods/728787) · [GitHub releases](https://github.com/Vergir/deadlock-hud-resize/releases/latest)
 
 ## Features
 
