@@ -151,7 +151,7 @@
     //    t = sy * 1440 / 1920 (round; 1.78 on 9:8, 1.5 on exact 4:3).
     //  - a personal r_aspectratio widens the view the game does not know about: t *= screen aspect / FOV_ASPECT.
     var crosshairT = 0, crosshairFov = 1;   // for the debug label
-    function fixCrosshair(hudCore, narrow, sx, sy, ux, uy, lw, lh, cw, ch) {
+    function fixCrosshair(hudCore, narrow, sx, sy, ux, uy, lw, lh, cw, ch, ox, oy) {
         var cr = hudCore.FindChildTraverse("crosshair");
         if (!cr) { return; }
         var fov = FOV_ASPECT > 0 ? (lw / lh) / FOV_ASPECT : 1;
@@ -161,6 +161,84 @@
         cr.style.uiScale = (kx * 100).toFixed(4) + "% " + (ky * 100).toFixed(4) + "% 100%";
         cr.style.width = (cw / kx).toFixed(2) + "px";        // own units, covers HudCore
         cr.style.height = (ch / ky).toFixed(2) + "px";
+        fixTargetElements(hudCore, cr, sx, sy, t, lw, lh, ox, oy);
+    }
+
+    // The unit-target diamond and the lock-on marker are placed by the engine on its own canvas: root
+    // units (sx x sy real px per unit, stretched on narrow screens) measured from the screen's top-left
+    // corner, whatever the parent's scale and offset (measured 2026-10-18: a unit at the screen center
+    // got position 720 = 1440 px / sx inside an element that started 160 px into the screen). The game
+    // also keeps a unit targeted from the same geometry, so a shifted element shifts the targeting cone.
+    // Give the two element panels exactly their vanilla geometry back: the engine's scale and the whole
+    // screen, starting at the screen corner (negative margins reach outside the HUD region; the
+    // ancestors up to HudCore must not clip). The elements are created per hero, so this runs every tick.
+    var TARGET_TYPES = { Citadel_AbilityHUDElement_UnitTarget: 1, Citadel_AbilityHUDElement_LockOn: 1 };
+    var targetElems = [];   // for the debug label
+    function fixTargetElements(hudCore, cr, sx, sy, t, lw, lh, ox, oy) {
+        targetElems = [];
+        var stack = [cr], seen = 0;
+        while (stack.length && seen < 400) {
+            var p = stack.pop(); seen++;
+            var n = p.GetChildCount();
+            for (var i = 0; i < n; i++) {
+                var c = p.GetChild(i);
+                if (!c) { continue; }
+                if (TARGET_TYPES[c.paneltype]) {
+                    var px = p.actualuiscale_x > 0 ? p.actualuiscale_x : t;   // parent's real px per unit
+                    var py = p.actualuiscale_y > 0 ? p.actualuiscale_y : t;
+                    var kx = sx / px, ky = sy / py;                           // relative to the parent
+                    c.style.uiScale = (kx * 100).toFixed(4) + "% " + (ky * 100).toFixed(4) + "% 100%";
+                    c.style.width = (lw / sx).toFixed(2) + "px";              // own units: the whole screen
+                    c.style.height = (lh / sy).toFixed(2) + "px";
+                    c.style.marginLeft = (-ox / px).toFixed(2) + "px";        // parent units: back to the
+                    c.style.marginRight = (-ox / px).toFixed(2) + "px";       // screen corner
+                    c.style.marginTop = (-oy / py).toFixed(2) + "px";
+                    c.style.marginBottom = (-oy / py).toFixed(2) + "px";
+                    for (var q = p, g = 0; q && q !== hudCore && g < 16; q = q.GetParent(), g++) {
+                        q.style.overflow = "noclip";
+                    }
+                    targetElems.push(c);
+                } else {
+                    stack.push(c);
+                }
+            }
+        }
+    }
+
+    // Debug: where the engine put the first target instance (unit_target_instance / lock_on_instance):
+    // its style position and transform (parent units), real px offset in HudCore, and the element's scale.
+    function offsetInY(p, ancestor) {
+        var y = 0;
+        for (var guard = 0; p && p !== ancestor && guard < 64; guard++) { y += p.actualyoffset; p = p.GetParent(); }
+        return y;
+    }
+    function findInstance(elem) {
+        var stack = [elem], seen = 0;
+        while (stack.length && seen < 200) {
+            var p = stack.pop(); seen++;
+            if (p.BHasClass("unit_target_instance") || p.BHasClass("lock_on_instance")) { return p; }
+            var n = p.GetChildCount();
+            for (var i = 0; i < n; i++) { var c = p.GetChild(i); if (c) { stack.push(c); } }
+        }
+        return null;
+    }
+    function targetDebug(hudCore) {
+        var s = "";
+        for (var i = 0; i < targetElems.length; i++) {
+            var e = targetElems[i];
+            if (!e.IsValid()) { continue; }
+            s += "\n" + e.paneltype.replace("Citadel_AbilityHUDElement_", "") + " scale=" +
+                 Number(e.actualuiscale_x).toFixed(3) + "," + Number(e.actualuiscale_y).toFixed(3) +
+                 " box=" + Number(e.actuallayoutwidth).toFixed(0) + "x" + Number(e.actuallayoutheight).toFixed(0) +
+                 " at=" + offsetIn(e, hudCore).toFixed(0) + "," + offsetInY(e, hudCore).toFixed(0) + "px";
+            var inst = findInstance(e);
+            if (inst) {
+                s += " inst pos=" + inst.style.position + " tr=" + inst.style.transform +
+                     " size=" + Number(inst.actuallayoutwidth).toFixed(0) + "x" + Number(inst.actuallayoutheight).toFixed(0) +
+                     " at=" + offsetIn(inst, hudCore).toFixed(0) + "," + offsetInY(inst, hudCore).toFixed(0) + "px";
+            } else { s += " (no instance)"; }
+        }
+        return s || "\nno target elements";
     }
 
     // While the shop is open, the lower-left group (#StatsAndModsContainer: quick-buy column, souls, items) is
@@ -241,7 +319,7 @@
                 if (k === "HudCore") {
                     fixShop(c, rw / sx / ux, rh / sy / uy, refW);
                     fixHealthBar(c, sx * ux);
-                    fixCrosshair(c, narrow, sx, sy, ux, uy, lw, lh, rw / sx / ux, rh / sy / uy);
+                    fixCrosshair(c, narrow, sx, sy, ux, uy, lw, lh, rw / sx / ux, rh / sy / uy, ox, oy);
                 }
             } else if (ox > 0 || oy > 0) {
                 // edge-anchored containers: keep them inside the region (margins are in the root's units)
@@ -265,6 +343,9 @@
                     if (rp) {
                         extra += "\npip scale=" + Number(rp.actualuiscale_x).toFixed(3) + "," + Number(rp.actualuiscale_y).toFixed(3) +
                                  " target=" + crosshairT.toFixed(3) + " fov=" + crosshairFov.toFixed(3) + " tr=" + rp.style.transform;
+                        extra += " HudCore at=" + offsetIn(hudCore, root).toFixed(0) + "," + offsetInY(hudCore, root).toFixed(0) + "px" +
+                                 " cr at=" + offsetIn(cr, hudCore).toFixed(0) + "," + offsetInY(cr, hudCore).toFixed(0) + "px";
+                        extra += targetDebug(hudCore);
                     } else { extra += "\npips not found"; }
                 } catch (e) { extra += "\npips error " + e; }
             }
