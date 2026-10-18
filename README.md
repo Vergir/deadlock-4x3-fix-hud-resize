@@ -33,7 +33,7 @@ With **Deadlock Mod Manager**: install the mod from its GameBanana page and pick
 
 Manually:
 
-1. Download one size, e.g. `deadlock-hud-resize-size1.0.zip`. Size 1.0 is the plain fix; pick another
+1. Download one size, e.g. `deadlock-hud-resize-v1.0.1-size1.0.zip`. Size 1.0 is the plain fix; pick another
    size for a smaller or larger HUD.
 2. Copy `pak01_dir.vpk` from the zip into `Deadlock\game\citadel\addons\` (create the folder if needed).
    If a `pak01_dir.vpk` from another mod is already there, rename this one to the next free number
@@ -88,7 +88,7 @@ own corrections; `npc_icons.css` carries the one CSS rule (the health bar positi
 ```bash
 pip install vpk
 python build.py --ui-size 1.0     # -> build/mod/pak01_dir.vpk
-python release.py                 # all sizes as zips -> build/dist/
+python release.py 1.0.2           # all sizes as zips named by version -> build/dist/
 ```
 
 `--test` adds an on-screen debug label with the measured values. `--hud-aspect W:H` confines the HUD
