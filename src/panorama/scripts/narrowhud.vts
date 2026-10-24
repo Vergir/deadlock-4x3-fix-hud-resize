@@ -512,6 +512,7 @@
             var k = keyOf(c);
             if (!k) { others.push((c.id || "-") + ":" + c.paneltype); continue; }
             if (k === "HudCore") { hudCore = c; }
+            if (k === "DashboardMain") { dashMain = c; }
             var cx = ux, cy = uy;
             if (k === "PopupManager") { cx = tRef / sx; cy = tRef / sy; popupMgr = c; }   // popups ignore UI Size
             c.style.uiScale = (cx * 100).toFixed(4) + "% " + (cy * 100).toFixed(4) + "% 100%";
@@ -582,11 +583,36 @@
         }
     }
 
+    // Main menu dialogue player (citadel_db_page_hero_vo_test): its .MainContents is a fixed 1680x900 box
+    // centred on the page, made for a 1920x1080 canvas. It gets the page height minus vanilla's 90px top and
+    // bottom, and on a canvas narrower than 1680 + 2x40 the page width minus 40px each side (its lists fill).
+    // The game creates the page when it is first opened: DashboardMain > ForegroundContainer > DashboardPages
+    // (a PageManager) > #CitadelHeroVOTestPage (found 2026-10-24 by searching the tree).
+    var dashMain = null, voPage = null;
+    function dashboardPage(id) {
+        var fg = dashMain.FindChild("ForegroundContainer");
+        var pages = fg && fg.FindChild("DashboardPages");
+        return pages ? pages.FindChild(id) : null;
+    }
+    function fixVOPage() {
+        if (!dashMain || !dashMain.IsValid()) { return; }
+        if (!voPage || !voPage.IsValid()) { voPage = dashboardPage("CitadelHeroVOTestPage"); }
+        if (!voPage) { return; }
+        var ux = voPage.actualuiscale_x, uy = voPage.actualuiscale_y;
+        if (!(ux > 0) || !(uy > 0) || !(voPage.actuallayoutheight > 0)) { return; }
+        var w = voPage.actuallayoutwidth / ux, h = voPage.actuallayoutheight / uy;
+        var main = findClass(voPage, "MainContents");
+        if (!main) { return; }
+        main.style.height = Math.max(900, h - 180).toFixed(2) + "px";
+        main.style.width = Math.min(1680, w - 80).toFixed(2) + "px";
+    }
+
     function tick() {
         if (!alive()) { return; }
         try {
             if (!root) { root = findRoot(ctx); }
             apply(false);
+            try { fixVOPage(); } catch (e) { log("dialogue player error: " + e); }
         } catch (e) { log("error: " + e); }
         $.Schedule(0.5, tick);
     }
