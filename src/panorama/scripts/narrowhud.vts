@@ -470,6 +470,7 @@
             var grid = p.FindChildTraverse("GridContainer"), cards = grid && grid.FindChild("RosterHeroes");
             if (!size || !cards) { continue; }
             var extra = Math.max(0, size.h - 1080), count = cards.GetChildCount();
+            if (extra >= 1) { enlargeRosterInfo(p); }
             var key = extra.toFixed(0) + "/" + count;
             if (extra < 1 || p.GetAttributeString("narrowhud_roster", "") === key) { continue; }
             var k = rosterScale(count, 710 + extra);
@@ -478,6 +479,20 @@
             cards.style.width = (800 / k).toFixed(2) + "px";
             p.SetAttributeString("narrowhud_roster", key);
             log("roster select: extra=" + extra.toFixed(0) + " cards=" + count + " k=" + k.toFixed(2));
+        }
+    }
+    // The hero's name, tags, abilities and gun tag (#HeroInfo, bottom right) and the stat icon column (#HeroStats,
+    // right) are shown at ROSTER_INFO_K times the popup's scale; 0 = the menus' vanilla size (popupVanillaK). The
+    // popup itself keeps the smaller 16:9 layout so the hero art shows whole (vanilla 4:3 cuts the head off).
+    var ROSTER_INFO_K = 0;
+    function enlargeRosterInfo(p) {
+        var k = ROSTER_INFO_K > 0 ? ROSTER_INFO_K : popupVanillaK, ids = ["HeroInfo", "HeroStats"];
+        for (var i = 0; i < ids.length; i++) {
+            var q = p.FindChildTraverse(ids[i]);
+            if (!q || q.GetAttributeString("narrowhud_k", "") === k.toFixed(3)) { continue; }
+            q.style.uiScale = (k * 100).toFixed(2) + "% " + (k * 100).toFixed(2) + "% 100%";
+            q.SetAttributeString("narrowhud_k", k.toFixed(3));
+            log("roster select: " + ids[i] + " at " + k.toFixed(3));
         }
     }
 
