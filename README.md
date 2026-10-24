@@ -103,8 +103,8 @@ both are for personal builds. `install.py` copies a build into the game and edit
 change them at the top of `install.py`. `install.py --loose` is for development: the script goes in
 as a loose file and a running game picks up each new install within a second (hot reload).
 Optional defaults can live in a git-ignored `local_settings.json` (`ui_size`, `hud_aspect`,
-`gameinfo_convars`, and `launch_options` with "modded" / "vanilla" Steam launch options that
-install / uninstall switch between).
+`gameinfo_convars`, and `launch_options`: named Steam launch options that `--launch NAME` on
+install / uninstall switches to, restarting Steam because it keeps them in memory).
 
 ## Source and support
 

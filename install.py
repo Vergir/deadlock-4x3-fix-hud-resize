@@ -14,9 +14,9 @@ the two from overwriting each other.
 configs use); pass "" to remove it again. This is NOT part of the HUD mod, it changes the
 game's field of view.
 
-With a "launch_options" entry in local_settings.json ({"modded": "-w 2880 -h 2560", "vanilla": ""})
-it also sets Deadlock's Steam launch options (install.py: modded, uninstall.py: vanilla). Without
--w/-h the game uses the resolution saved in video.txt. Steam keeps launch options in
+--launch NAME also sets Deadlock's Steam launch options to the local_settings.json "launch_options"
+entry NAME (e.g. {"modded": "-w 2880 -h 2560", "wide": "-w 2880 -h 1620"}); without it they are left
+alone (the game saves the resolution it last ran at to video.txt). Steam keeps launch options in
 userdata/<id>/config/localconfig.vdf and rewrites that file on exit, so when they need to change and
 Steam is running, the script shuts Steam down, edits the file and starts Steam again.
 """
@@ -250,5 +250,6 @@ if __name__ == "__main__":
         set_convar(name, str(value))
     if "--aspect-convar" in sys.argv:
         set_convar("r_aspectratio", sys.argv[sys.argv.index("--aspect-convar") + 1])
-    # --launch NAME picks another local_settings.json launch_options entry (e.g. "vanilla" for 16:9 tests)
-    set_launch_options(sys.argv[sys.argv.index("--launch") + 1] if "--launch" in sys.argv else "modded")
+    # launch options only on request (changing them restarts Steam)
+    if "--launch" in sys.argv:
+        set_launch_options(sys.argv[sys.argv.index("--launch") + 1])
