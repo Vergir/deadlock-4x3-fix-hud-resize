@@ -451,7 +451,8 @@
         if (!alive()) { return; }
         try { applyShopMode(false); } catch (e) { log("shop error: " + e); }
         try { fixBuildBrowser(); } catch (e) { log("build browser error: " + e); }
-        try { fixWatchPage(); } catch (e) { log("watch page error: " + e); }
+        try { fixCentredPages(); } catch (e) { log("centred page error: " + e); }
+        try { fixMenuPages(); } catch (e) { log("menu page error: " + e); }
         $.Schedule(0.05, watchShop);
     }
 
@@ -584,12 +585,60 @@
         }
     }
 
-    // Main menu dialogue player (citadel_db_page_hero_vo_test): its .MainContents is a fixed 1680x900 box
-    // centred on the page, made for a 1920x1080 canvas. It gets the page height minus vanilla's 90px top and
-    // bottom, and on a canvas narrower than 1680 + 2x40 the page width minus 40px each side (its lists fill).
+    // Main menu pages whose content is one fixed box (.MainContents) made for a 1920x1080 canvas; the panels
+    // inside fill whatever height and width they get. The box gets the page height minus vanilla's space above
+    // and below it, and on a narrow canvas the page width minus `side` (vanilla margins, or 40px a side for a
+    // centred box):
+    //  - dialogue player (citadel_db_page_hero_vo_test): 1680x900 centred, 90px above and below.
+    //  - player profile (citadel_db_page_profile): 1700x900 at 100px from the left, 80px from the top.
     // The game creates a menu page when it is first opened: DashboardMain > ForegroundContainer > DashboardPages
     // (a PageManager) > the page, e.g. #CitadelHeroVOTestPage (found 2026-10-24 by searching the tree).
-    var dashMain = null, voPage = null;
+    var MENU_PAGES = [
+        { type: "CitadelHeroVOTestPage", w: 1680, h: 900, side: 80 },
+        { type: "CitadelProfilePage", w: 1700, h: 900, side: 100 + 40, poll: alignProfileStats }
+    ];
+    // Profile: the stats panel (#StatsBlock) grows by the extra height under its title band. The boxed tiles
+    // (#StatsRight, vanilla padding-top 80px) move down by half of it; the plain numbers (#StatsLeft, vanilla
+    // margin-top 150px) are centred on the tiles' visible boxes, so the two columns line up by their middles
+    // (vanilla's offset between them only looked right next to the band). A tile (.BlockStat, 220px) shows its
+    // box (.blockBacker) in its bottom 78%, the diamond icon above. Measured from content, so it re-runs on every
+    // poll; the margin applied is recorded on the column so the next measurement adds to it.
+    function alignProfileStats(page, extra) {
+        if (extra < 1) { return; }
+        var block = page.FindChildTraverse("StatsBlock");
+        var left = block && block.FindChild("StatsLeft"), right = block && block.FindChild("StatsRight");
+        var u = block && block.actualuiscale_y;
+        if (!left || !right || !(u > 0)) { return; }
+        var pad = (80 + extra / 2).toFixed(2);
+        if (right.GetAttributeString("narrowhud_pt", "") !== pad) {
+            right.style.paddingTop = pad + "px";
+            right.SetAttributeString("narrowhud_pt", pad);
+        }
+        var boxes = contentSpan(right, block, u, function (c) { return findClass(c, "blockBacker"); });
+        var rows = contentSpan(left, block, u, null);
+        if (!boxes || !rows) { return; }
+        var current = parseFloat(left.GetAttributeString("narrowhud_mt", ""));
+        if (isNaN(current)) { current = 150; }
+        var want = current + (boxes.top + boxes.bottom) / 2 - (rows.top + rows.bottom) / 2;
+        if (Math.abs(want - current) < 0.5) { return; }
+        left.style.marginTop = want.toFixed(2) + "px";
+        left.SetAttributeString("narrowhud_mt", want.toFixed(2));
+    }
+    // vertical extent (in `block` units) of a column's visible children, or of a part of each (`part`)
+    function contentSpan(col, block, u, part) {
+        var top = Infinity, bottom = -Infinity;
+        for (var i = 0, n = col.GetChildCount(); i < n; i++) {
+            var c = col.GetChild(i);
+            if (c && part) { c = part(c); }
+            var h = c ? c.actuallayoutheight / u : 0;
+            if (!(h > 0)) { continue; }                           // collapsed
+            var y = offsetInY(c, block) / u;
+            if (!isFinite(y) || Math.abs(y) > 5000) { return null; }   // before layout
+            top = Math.min(top, y); bottom = Math.max(bottom, y + h);
+        }
+        return isFinite(top) ? { top: top, bottom: bottom } : null;
+    }
+    var dashMain = null, menuPages = {};
     function dashboardPage(type) {
         if (!dashMain || !dashMain.IsValid()) { return null; }
         var fg = dashMain.FindChild("ForegroundContainer");
@@ -608,36 +657,53 @@
         return { w: p.actuallayoutwidth / ux, h: p.actuallayoutheight / uy };
     }
 
-    // Main menu Watch Matches (citadel_db_page_watch): laid out for 1080px. .MatchContents (filters + cards)
-    // starts 170px down and holds the filters and 4 rows of match cards (2 rows of taller featured cards on
-    // the first pages). On a taller page it keeps its vanilla size and moves down by half the extra height;
-    // the title stays at the top. (Growing the cards to fill the height was tried; the user preferred this.)
-    var watchPage = null;
-    function fixWatchPage() {
-        if (!watchPage || !watchPage.IsValid()) { watchPage = dashboardPage("CitadelWatchPage"); }
-        if (!watchPage) { return; }
-        var size = pageSize(watchPage);
-        if (!size) { return; }
-        var extra = Math.max(0, size.h - 1080), key = extra.toFixed(0);
-        if (watchPage.GetAttributeString("narrowhud_watch", "") === key) { return; }
-        var contents = findClass(watchPage, "MatchContents");
-        if (!contents) { return; }
-        contents.style.marginTop = (170 + extra / 2).toFixed(2) + "px";
-        watchPage.SetAttributeString("narrowhud_watch", key);
-        log("watch page: extra=" + key);
+    // Main menu pages laid out for 1080px whose content (cards in pages the game rebuilds) keeps its vanilla
+    // size and moves down by half the extra height, by the top margin of one element (`part`, vanilla `top`):
+    //  - Watch Matches (citadel_db_page_watch): .MatchContents, the filters and 4 rows of match cards (2 rows of
+    //    taller featured cards on the first pages), 170px down; the title stays at the top.
+    //  - Match history (citadel_db_page_profile_match_history): #MatchHistoryTitleBar, 100px down, with the 4x4
+    //    card grid (#MatchListing) below it.
+    // Growing the cards to fill the height was tried on both (also with each card's content centred); the user
+    // preferred centring.
+    var CENTRED_PAGES = [
+        { type: "CitadelWatchPage", top: 170, part: function (p) { return findClass(p, "MatchContents"); } },
+        { type: "CitadelProfilePageMatchHistory", top: 100, part: function (p) { return p.FindChild("MatchHistoryTitleBar"); } }
+    ];
+    function fixCentredPages() {
+        for (var i = 0; i < CENTRED_PAGES.length; i++) {
+            var spec = CENTRED_PAGES[i], page = menuPages[spec.type];
+            if (!page || !page.IsValid()) { page = menuPages[spec.type] = dashboardPage(spec.type); }
+            if (!page) { continue; }
+            var size = pageSize(page);
+            if (!size) { continue; }
+            var extra = Math.max(0, size.h - 1080), key = extra.toFixed(0);
+            if (page.GetAttributeString("narrowhud_centred", "") === key) { continue; }
+            var part = spec.part(page);
+            if (!part) { continue; }
+            part.style.marginTop = (spec.top + extra / 2).toFixed(2) + "px";
+            page.SetAttributeString("narrowhud_centred", key);
+            log(spec.type + ": centred, extra=" + key);
+        }
     }
 
-    function fixVOPage() {
-        if (!dashMain || !dashMain.IsValid()) { return; }
-        if (!voPage || !voPage.IsValid()) { voPage = dashboardPage("CitadelHeroVOTestPage"); }
-        if (!voPage) { return; }
-        var ux = voPage.actualuiscale_x, uy = voPage.actualuiscale_y;
-        if (!(ux > 0) || !(uy > 0) || !(voPage.actuallayoutheight > 0)) { return; }
-        var w = voPage.actuallayoutwidth / ux, h = voPage.actuallayoutheight / uy;
-        var main = findClass(voPage, "MainContents");
-        if (!main) { return; }
-        main.style.height = Math.max(900, h - 180).toFixed(2) + "px";
-        main.style.width = Math.min(1680, w - 80).toFixed(2) + "px";
+    function fixMenuPages() {
+        for (var i = 0; i < MENU_PAGES.length; i++) {
+            var spec = MENU_PAGES[i], page = menuPages[spec.type];
+            if (!page || !page.IsValid()) { page = menuPages[spec.type] = dashboardPage(spec.type); }
+            if (!page) { continue; }
+            var size = pageSize(page);
+            if (!size) { continue; }
+            var w = Math.min(spec.w, size.w - spec.side), h = Math.max(spec.h, size.h - (1080 - spec.h));
+            var key = w.toFixed(0) + "x" + h.toFixed(0);
+            if (spec.poll) { spec.poll(page, h - spec.h); }
+            if (page.GetAttributeString("narrowhud_box", "") === key) { continue; }
+            var main = findClass(page, "MainContents");
+            if (!main) { continue; }
+            main.style.width = w.toFixed(2) + "px";
+            main.style.height = h.toFixed(2) + "px";
+            page.SetAttributeString("narrowhud_box", key);
+            log(spec.type + ": " + key);
+        }
     }
 
     function tick() {
@@ -645,7 +711,6 @@
         try {
             if (!root) { root = findRoot(ctx); }
             apply(false);
-            try { fixVOPage(); } catch (e) { log("dialogue player error: " + e); }
         } catch (e) { log("error: " + e); }
         $.Schedule(0.5, tick);
     }
