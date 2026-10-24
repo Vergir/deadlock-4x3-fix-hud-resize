@@ -23,6 +23,24 @@
     // full-screen containers that must NOT be confined to the HUD region: tooltips and context menus are
     // positioned from the cursor and get clipped by a smaller manager; popups (settings) are full-screen UI
     var NOREGION = { PopupManager: 1, ContextMenuManager: 1, TooltipManager: 1 };
+    // containers laid out at the menu scale (the game's own canvas width), not the HUD's (see apply)
+    var MENUS = { DashboardMain: 1, EscapeMenu: 1 };
+    var menuFitK = 1, popupVanillaK = 1;
+
+    // Give a panel its own scale k relative to its parent and cover the parent with it (less the insets, parent
+    // units, that its margins take). Only once per k and parent size; k = 1 on a panel never scaled leaves it alone.
+    function fitPanel(p, k, insetW, insetH) {
+        var parent = p.GetParent();
+        var ux = parent && parent.actualuiscale_x, uy = parent && parent.actualuiscale_y;
+        if (!(ux > 0) || !(uy > 0) || !(parent.actuallayoutwidth > 0)) { return; }
+        var pw = parent.actuallayoutwidth / ux - (insetW || 0), ph = parent.actuallayoutheight / uy - (insetH || 0);
+        var key = k.toFixed(4) + "/" + pw.toFixed(0) + "x" + ph.toFixed(0), had = p.GetAttributeString("narrowhud_fit", "");
+        if (had === key || (!had && Math.abs(k - 1) < 0.0001)) { return; }
+        p.style.uiScale = (k * 100).toFixed(4) + "% " + (k * 100).toFixed(4) + "% 100%";
+        p.style.width = (pw / k).toFixed(2) + "px";
+        p.style.height = (ph / k).toFixed(2) + "px";
+        p.SetAttributeString("narrowhud_fit", key);
+    }
 
     var ctx = $.GetContextPanel();
     var root = null;
@@ -425,7 +443,8 @@
     // The build browser popup (layout/popups/citadel_popup_build_browser.xml) is laid out for a 1080px-tall
     // popup canvas: #BuildsContent starts 40px down and its list box (.MainContainer) is a fixed 830px, so a
     // taller canvas leaves the bottom empty: the list box grows by the extra height, like the shop (centring
-    // the vanilla-sized content instead was the alternative; the user preferred filling).
+    // the vanilla-sized content instead was the alternative; the user preferred filling). Since menus have
+    // vanilla size, the popup is shown at vanilla size too (popupVanillaK), so the extra height is small.
     var popupMgr = null;
     // Hero select / create roster popup (popups/citadel_popup_roster_select): laid out for a 1080px canvas. On
     // the left, a header and #GridContainer (800x710) with the hero cards in #RosterHeroes (75x124, 4px margins,
@@ -468,6 +487,7 @@
         for (var i = 0; i < n; i++) {
             var p = popupMgr.GetChild(i);
             if (!p || p.paneltype !== "PopupBuildBrowser") { continue; }
+            fitPanel(p, popupVanillaK);   // vanilla size like the menus (the game's 4:3 layout fits it)
             var u = p.actualuiscale_y;
             if (!(u > 0) || !(p.actuallayoutheight > 0)) { continue; }
             var extra = p.actuallayoutheight / u - 1080;
@@ -537,12 +557,22 @@
         // reference scale: that canvas fitted to the region width; never enlarge
         var tRef = Math.min(sx, sy, rw / refW);
         var ux = tRef * uiSize / sx, uy = tRef * uiSize / sy;
+        // Menus (main menu, post-match, Esc menu) keep the game's own canvas width (1440 on narrow screens, laid
+        // out by the game's AspectRatio4x3 rules), only un-stretched; times UI Size like the HUD. Screens built
+        // wider than that fit themselves (fitPanel): menuFitK is their scale relative to the menu, the largest
+        // that still shows a 1920-wide layout, never above the menu's own. Popups keep the HUD's reference scale
+        // (no UI Size); popupVanillaK brings one back to the menu's vanilla size.
+        var tMenu = Math.min(sx, sy, rw / (narrow ? 1440 : lw / sx));
+        var mx = tMenu * uiSize / sx, my = tMenu * uiSize / sy;
+        menuFitK = narrow ? Math.min(1, tRef / (tMenu * uiSize)) : 1;
+        popupVanillaK = narrow ? tMenu / tRef : 1;
         var key = [sx, sy, lw, lh, uiSize, narrow].join("|");
         var changed = force || key !== last;
         last = key;
         var state = "px=" + lw.toFixed(0) + "x" + lh.toFixed(0) + " scale=" + sx.toFixed(3) + "," + sy.toFixed(3) +
             " size=" + uiSize.toFixed(2) + (narrow ? " narrow" : " ref=" + refW.toFixed(0)) +
-            " -> ui-scale " + (ux * 100).toFixed(2) + "% " + (uy * 100).toFixed(2) + "%";
+            " -> ui-scale " + (ux * 100).toFixed(2) + "% " + (uy * 100).toFixed(2) + "%" +
+            " menus " + (mx * 100).toFixed(2) + "% " + (my * 100).toFixed(2) + "% fit " + menuFitK.toFixed(3);
         if (changed) { log(state + " region=" + rw.toFixed(0) + "x" + rh.toFixed(0)); }
         var n = root.GetChildCount(), others = [], hudCore = null;
         for (var i = 0; i < n; i++) {
@@ -553,6 +583,7 @@
             if (k === "HudCore") { hudCore = c; }
             if (k === "DashboardMain") { dashMain = c; }
             var cx = ux, cy = uy;
+            if (MENUS[k]) { cx = mx; cy = my; }
             if (k === "PopupManager") { cx = tRef / sx; cy = tRef / sy; popupMgr = c; }   // popups ignore UI Size
             c.style.uiScale = (cx * 100).toFixed(4) + "% " + (cy * 100).toFixed(4) + "% 100%";
             if (NOREGION[k]) {
@@ -563,13 +594,13 @@
             } else if (FULLSCREEN[k]) {
                 // size in the container's own (scaled) units so it covers exactly the region;
                 // symmetric margins (root units) place it correctly whether it is left-aligned or centered
-                c.style.width = (rw / sx / ux).toFixed(2) + "px";
-                c.style.height = (rh / sy / uy).toFixed(2) + "px";
+                c.style.width = (rw / sx / cx).toFixed(2) + "px";
+                c.style.height = (rh / sy / cy).toFixed(2) + "px";
                 c.style.marginLeft = (ox / sx).toFixed(2) + "px";
                 c.style.marginRight = (ox / sx).toFixed(2) + "px";
                 c.style.marginTop = (oy / sy).toFixed(2) + "px";
                 c.style.marginBottom = (oy / sy).toFixed(2) + "px";
-                if (k === "EscapeMenu") { fixEscapeBackdrop(c, lw, lh, ox, oy, sx, sy, ux, uy); }
+                if (k === "EscapeMenu") { fixEscapeBackdrop(c, lw, lh, ox, oy, sx, sy, cx, cy); }
                 if (k === "HudCore") {
                     // separately, so a failure in one leaves the others (and the debug label) working
                     try { fixShop(c, rw / sx / ux, rh / sy / uy, refW); } catch (e) { log("shop error: " + e); }
@@ -623,15 +654,15 @@
     }
 
     // Main menu pages whose content is one fixed box (.MainContents) made for a 1920x1080 canvas; the panels
-    // inside fill whatever height and width they get. The box gets the page height minus vanilla's space above
-    // and below it, and on a narrow canvas the page width minus `side` (vanilla margins, or 40px a side for a
-    // centred box):
-    //  - dialogue player (citadel_db_page_hero_vo_test): 1680x900 centred, 90px above and below.
+    // inside fill whatever height and width they get. The page fits itself to a 1920-wide layout (fitPanel), and
+    // the box gets the page height minus vanilla's space above and below it, and on a narrower canvas the page
+    // width minus `side` (vanilla margins):
     //  - player profile (citadel_db_page_profile): 1700x900 at 100px from the left, 80px from the top.
+    // (The dialogue player, 1680x900 centred, had the same treatment until menus got vanilla size; at 1440 units
+    // the game's own 4:3 layout is better.)
     // The game creates a menu page when it is first opened: DashboardMain > ForegroundContainer > DashboardPages
-    // (a PageManager) > the page, e.g. #CitadelHeroVOTestPage (found 2026-10-24 by searching the tree).
+    // (a PageManager) > the page, e.g. #CitadelProfilePage (found 2026-10-24 by searching the tree).
     var MENU_PAGES = [
-        { type: "CitadelHeroVOTestPage", w: 1680, h: 900, side: 80 },
         { type: "CitadelProfilePage", w: 1700, h: 900, side: 100 + 40, poll: alignProfileStats }
     ];
     // Profile: the stats panel (#StatsBlock) grows by the extra height under its title band. The boxed tiles
@@ -695,22 +726,23 @@
     }
 
     // Main menu pages laid out for 1080px whose content (cards in pages the game rebuilds) keeps its vanilla
-    // size and moves down by half the extra height, by the top margin of one element (`part`, vanilla `top`):
+    // size and moves down by half the extra height, by the top margin of one element (`part`, vanilla `top`).
+    // The page fits itself to a 1920-wide layout first (fitPanel):
     //  - Watch Matches (citadel_db_page_watch): .MatchContents, the filters and 4 rows of match cards (2 rows of
-    //    taller featured cards on the first pages), 170px down; the title stays at the top.
-    //  - Match history (citadel_db_page_profile_match_history): #MatchHistoryTitleBar, 100px down, with the 4x4
-    //    card grid (#MatchListing) below it.
-    // Growing the cards to fill the height was tried on both (also with each card's content centred); the user
-    // preferred centring.
+    //    taller featured cards on the first pages), 170px down; the title stays at the top. At the game's 1440
+    //    units its 2x2 grid breaks into one column.
+    // Growing the cards to fill the height was tried (also with each card's content centred); the user
+    // preferred centring. Match history had the same treatment until menus got vanilla size: at 1440 units the
+    // game's own 4:3 layout fits.
     var CENTRED_PAGES = [
-        { type: "CitadelWatchPage", top: 170, part: function (p) { return findClass(p, "MatchContents"); } },
-        { type: "CitadelProfilePageMatchHistory", top: 100, part: function (p) { return p.FindChild("MatchHistoryTitleBar"); } }
+        { type: "CitadelWatchPage", top: 170, part: function (p) { return findClass(p, "MatchContents"); } }
     ];
     function fixCentredPages() {
         for (var i = 0; i < CENTRED_PAGES.length; i++) {
             var spec = CENTRED_PAGES[i], page = menuPages[spec.type];
             if (!page || !page.IsValid()) { page = menuPages[spec.type] = dashboardPage(spec.type); }
             if (!page) { continue; }
+            fitPanel(page, menuFitK);
             var size = pageSize(page);
             if (!size) { continue; }
             var extra = Math.max(0, size.h - 1080), key = extra.toFixed(0);
@@ -725,46 +757,48 @@
 
     // Post-match page (post_game/citadel_db_page_post_game_new): a carousel of screens laid out for 1080px. Only
     // two are changed (the team and MVP screens are left alone), each inside its own screen:
-    //  - #ScoreboardScreen: match info and two teams of 6 player rows, from the top. On a taller page it keeps
-    //    its vanilla size and moves down by half the extra height (spreading the rows out was tried, not kept);
-    //    on a shorter one it is scaled down to fit.
-    //  - #GraphsScreen (match_details_graphs): the graph column (.MainCol, max 780px) and the graph in it
-    //    (.GraphCtn and the UICanvas #Graph, 700px) grow by the extra height; the lane-stats view shares .MainCol.
+    //  - #ScoreboardScreen: match info and two teams of 6 player rows, from the top. It fits itself to a 1920-wide
+    //    layout (at the game's 1440 units the right columns are cut off) and to a 1080-tall one (on a shorter page,
+    //    UI size above 1 on a wide screen, it ran into the footer buttons); in a taller box it keeps its vanilla
+    //    size and moves down by half the extra height (spreading the rows out was tried, not kept).
+    //  - #GraphsScreen (match_details_graphs): #Graphs fits itself to a 1920-wide layout like the scoreboard, and
+    //    the graph column (.MainCol, max 780px) and the graph in it (.GraphCtn and the UICanvas #Graph, 700px)
+    //    grow by the extra height; the lane-stats view shares .MainCol. #Graphs has vanilla margins of 40 a side
+    //    and 160 below (parent units), so it is 920 tall on a 1080 page.
     var postGamePage = null;
     function fixPostGame() {
         if (!postGamePage || !postGamePage.IsValid()) { postGamePage = dashboardPage("CitadelPostGameNew"); }
         if (!postGamePage) { return; }
         var size = pageSize(postGamePage);
         if (!size) { return; }
-        var extra = Math.max(0, size.h - 1080), key = extra.toFixed(0);
 
         var sbScreen = postGamePage.FindChildTraverse("ScoreboardScreen");
         var board = sbScreen && sbScreen.FindChild("Scoreboard");
         var scroll = board && findClass(board, "ScoreboardScrollContainer");
-        // on a page shorter than 1080px (UI size above 1 on a wide screen) the scoreboard does not fit and runs
-        // into the footer buttons: it is shown at k = height / 1080, laid out in a 1080px-tall box
-        var k = Math.min(1, size.h / 1080), sbKey = key + "/" + k.toFixed(3);
-        if (scroll && board.GetAttributeString("narrowhud_sb", "") !== sbKey) {
-            scroll.style.marginTop = (extra / 2).toFixed(2) + "px";
-            if (k < 1) {
-                board.style.uiScale = (k * 100).toFixed(2) + "% " + (k * 100).toFixed(2) + "% 100%";
-                board.style.width = (size.w / k).toFixed(2) + "px";
-                board.style.height = "1080px";
+        if (scroll) {
+            fitPanel(board, Math.min(menuFitK, size.h / 1080));
+            var bs = pageSize(board), sbExtra = bs ? Math.max(0, bs.h - 1080) : 0, sbKey = sbExtra.toFixed(0);
+            if (bs && board.GetAttributeString("narrowhud_sb", "") !== sbKey) {
+                scroll.style.marginTop = (sbExtra / 2).toFixed(2) + "px";
+                board.SetAttributeString("narrowhud_sb", sbKey);
+                log("post-game scoreboard: extra=" + sbKey);
             }
-            board.SetAttributeString("narrowhud_sb", sbKey);
-            log("post-game scoreboard: extra=" + key + " k=" + k.toFixed(3));
         }
 
         var grScreen = postGamePage.FindChildTraverse("GraphsScreen");
         var graphs = grScreen && grScreen.FindChild("Graphs");
         var col = graphs && findClass(graphs, "MainCol"), ctn = graphs && findClass(graphs, "GraphCtn");
         var canvas = ctn && ctn.FindChild("Graph");
-        if (col && ctn && canvas && graphs.GetAttributeString("narrowhud_graphs", "") !== key) {
-            col.style.maxHeight = (780 + extra).toFixed(2) + "px";
-            ctn.style.height = (700 + extra).toFixed(2) + "px";
-            canvas.style.height = (700 + extra).toFixed(2) + "px";
-            graphs.SetAttributeString("narrowhud_graphs", key);
-            log("post-game graphs: extra=" + key);
+        if (col && ctn && canvas) {
+            fitPanel(graphs, menuFitK, 80, 160);
+            var gs = pageSize(graphs), extra = gs ? Math.max(0, gs.h - 920) : 0, key = extra.toFixed(0);
+            if (gs && graphs.GetAttributeString("narrowhud_graphs", "") !== key) {
+                col.style.maxHeight = (780 + extra).toFixed(2) + "px";
+                ctn.style.height = (700 + extra).toFixed(2) + "px";
+                canvas.style.height = (700 + extra).toFixed(2) + "px";
+                graphs.SetAttributeString("narrowhud_graphs", key);
+                log("post-game graphs: extra=" + key);
+            }
         }
     }
 
@@ -773,6 +807,7 @@
             var spec = MENU_PAGES[i], page = menuPages[spec.type];
             if (!page || !page.IsValid()) { page = menuPages[spec.type] = dashboardPage(spec.type); }
             if (!page) { continue; }
+            fitPanel(page, menuFitK);
             var size = pageSize(page);
             if (!size) { continue; }
             var w = Math.min(spec.w, size.w - spec.side), h = Math.max(spec.h, size.h - (1080 - spec.h));
