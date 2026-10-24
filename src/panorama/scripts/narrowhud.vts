@@ -496,13 +496,31 @@
         }
     }
 
+    // Popups shown at the menus' vanilla size (the game's 4:3 layout fits them); the others keep the 16:9 layout.
+    // 1: the popup covers the screen (fitPanel); {w, h}: the popup is a centred box of that vanilla size, only
+    // scaled (its own alignment keeps it centred).
+    var VANILLA_POPUPS = { PopupBuildBrowser: 1, CitadelPopupGlobalLeaderboard: { w: 1400, h: 900 } };
+    function fixVanillaPopups() {
+        if (!popupMgr || !popupMgr.IsValid()) { return; }
+        for (var i = 0, n = popupMgr.GetChildCount(); i < n; i++) {
+            var p = popupMgr.GetChild(i), spec = p && VANILLA_POPUPS[p.paneltype];
+            if (!spec) { continue; }
+            if (spec === 1) { fitPanel(p, popupVanillaK); continue; }
+            var key = popupVanillaK.toFixed(4);
+            if (p.GetAttributeString("narrowhud_box", "") === key) { continue; }
+            p.style.uiScale = (popupVanillaK * 100).toFixed(4) + "% " + (popupVanillaK * 100).toFixed(4) + "% 100%";
+            p.style.width = spec.w + "px";
+            p.style.height = spec.h + "px";
+            p.SetAttributeString("narrowhud_box", key);
+        }
+    }
+
     function fixBuildBrowser() {
         if (!popupMgr || !popupMgr.IsValid()) { return; }
         var n = popupMgr.GetChildCount();
         for (var i = 0; i < n; i++) {
             var p = popupMgr.GetChild(i);
             if (!p || p.paneltype !== "PopupBuildBrowser") { continue; }
-            fitPanel(p, popupVanillaK);   // vanilla size like the menus (the game's 4:3 layout fits it)
             var u = p.actualuiscale_y;
             if (!(u > 0) || !(p.actuallayoutheight > 0)) { continue; }
             var extra = p.actuallayoutheight / u - 1080;
@@ -520,6 +538,7 @@
     function watchShop() {
         if (!alive()) { return; }
         try { applyShopMode(false); } catch (e) { log("shop error: " + e); }
+        try { fixVanillaPopups(); } catch (e) { log("popup error: " + e); }
         try { fixBuildBrowser(); } catch (e) { log("build browser error: " + e); }
         try { fixRosterSelect(); } catch (e) { log("roster select error: " + e); }
         try { fixCentredPages(); } catch (e) { log("centred page error: " + e); }
@@ -748,11 +767,15 @@
     //    taller featured cards on the first pages), 170px down; the title (#WatchTitle, 90px down) moves with it.
     //    It needs 1660 units across (the grid); at the game's 1440 units its 2x2 grid breaks into one column.
     // Growing the cards to use the height was tried (taller cards; with their content centred; with bigger
-    // avatars and score); the user kept vanilla-size cards. Match history had the same treatment until menus got
-    // vanilla size: at 1440 units the game's own 4:3 layout fits.
+    // avatars and score); the user kept vanilla-size cards.
+    //  - Match history (citadel_db_page_profile_match_history): #MatchHistoryTitleBar, 100px down, with the 4x4
+    //    card grid below it. `vanilla`: the game's 4:3 layout fits at the menu's own scale, so no fitting; only
+    //    centred (the un-stretched canvas is taller than 1080).
     var CENTRED_PAGES = [
         { type: "CitadelWatchPage", top: 170, part: function (p) { return findClass(p, "MatchContents"); },
-          needW: 1660 + 80, title: { top: 90, part: function (p) { return p.FindChild("WatchTitle"); } } }
+          needW: 1660 + 80, title: { top: 90, part: function (p) { return p.FindChild("WatchTitle"); } } },
+        { type: "CitadelProfilePageMatchHistory", top: 100, part: function (p) { return p.FindChild("MatchHistoryTitleBar"); },
+          vanilla: true }
     ];
     // scale for a page that needs needW units across, relative to its parent (option A: never above the menu's)
     function fitWidthK(page, needW) {
@@ -765,7 +788,7 @@
             var spec = CENTRED_PAGES[i], page = menuPages[spec.type];
             if (!page || !page.IsValid()) { page = menuPages[spec.type] = dashboardPage(spec.type); }
             if (!page) { continue; }
-            fitPanel(page, spec.needW ? fitWidthK(page, spec.needW) : menuFitK);
+            if (!spec.vanilla) { fitPanel(page, spec.needW ? fitWidthK(page, spec.needW) : menuFitK); }
             var size = pageSize(page);
             if (!size) { continue; }
             var extra = Math.max(0, size.h - 1080), shift = extra / 2, key = extra.toFixed(0);
