@@ -451,6 +451,7 @@
         if (!alive()) { return; }
         try { applyShopMode(false); } catch (e) { log("shop error: " + e); }
         try { fixBuildBrowser(); } catch (e) { log("build browser error: " + e); }
+        try { fixWatchPage(); } catch (e) { log("watch page error: " + e); }
         $.Schedule(0.05, watchShop);
     }
 
@@ -586,14 +587,46 @@
     // Main menu dialogue player (citadel_db_page_hero_vo_test): its .MainContents is a fixed 1680x900 box
     // centred on the page, made for a 1920x1080 canvas. It gets the page height minus vanilla's 90px top and
     // bottom, and on a canvas narrower than 1680 + 2x40 the page width minus 40px each side (its lists fill).
-    // The game creates the page when it is first opened: DashboardMain > ForegroundContainer > DashboardPages
-    // (a PageManager) > #CitadelHeroVOTestPage (found 2026-10-24 by searching the tree).
+    // The game creates a menu page when it is first opened: DashboardMain > ForegroundContainer > DashboardPages
+    // (a PageManager) > the page, e.g. #CitadelHeroVOTestPage (found 2026-10-24 by searching the tree).
     var dashMain = null, voPage = null;
-    function dashboardPage(id) {
+    function dashboardPage(type) {
+        if (!dashMain || !dashMain.IsValid()) { return null; }
         var fg = dashMain.FindChild("ForegroundContainer");
         var pages = fg && fg.FindChild("DashboardPages");
-        return pages ? pages.FindChild(id) : null;
+        if (!pages) { return null; }
+        for (var i = 0, n = pages.GetChildCount(); i < n; i++) {
+            var p = pages.GetChild(i);
+            if (p && p.paneltype === type) { return p; }
+        }
+        return null;
     }
+    // page canvas size in its own units, or null before layout
+    function pageSize(p) {
+        var ux = p.actualuiscale_x, uy = p.actualuiscale_y;
+        if (!(ux > 0) || !(uy > 0) || !(p.actuallayoutheight > 0)) { return null; }
+        return { w: p.actuallayoutwidth / ux, h: p.actuallayoutheight / uy };
+    }
+
+    // Main menu Watch Matches (citadel_db_page_watch): laid out for 1080px. .MatchContents (filters + cards)
+    // starts 170px down and holds the filters and 4 rows of match cards (2 rows of taller featured cards on
+    // the first pages). On a taller page it keeps its vanilla size and moves down by half the extra height;
+    // the title stays at the top. (Growing the cards to fill the height was tried; the user preferred this.)
+    var watchPage = null;
+    function fixWatchPage() {
+        if (!watchPage || !watchPage.IsValid()) { watchPage = dashboardPage("CitadelWatchPage"); }
+        if (!watchPage) { return; }
+        var size = pageSize(watchPage);
+        if (!size) { return; }
+        var extra = Math.max(0, size.h - 1080), key = extra.toFixed(0);
+        if (watchPage.GetAttributeString("narrowhud_watch", "") === key) { return; }
+        var contents = findClass(watchPage, "MatchContents");
+        if (!contents) { return; }
+        contents.style.marginTop = (170 + extra / 2).toFixed(2) + "px";
+        watchPage.SetAttributeString("narrowhud_watch", key);
+        log("watch page: extra=" + key);
+    }
+
     function fixVOPage() {
         if (!dashMain || !dashMain.IsValid()) { return; }
         if (!voPage || !voPage.IsValid()) { voPage = dashboardPage("CitadelHeroVOTestPage"); }
