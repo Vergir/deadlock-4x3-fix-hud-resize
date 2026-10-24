@@ -19,7 +19,6 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 RAW = os.path.join(HERE, "pics")
 OUT = os.path.join(RAW, "gamebanana")
 FONT = "C:/Windows/Fonts/segoeuib.ttf"
-GOLD = (216, 201, 163)
 W, H = 1920, 1080
 TITLE = "4:3 / 5:4 Fix & HUD Resize"
 
@@ -73,14 +72,24 @@ def font(size):
     return ImageFont.truetype(FONT, size)
 
 
+HILITE = (255, 64, 170)   # hot pink: a colour the HUD does not use, so a highlight never reads as part of the game
+
+
 def box(img, b, k=1.0):
-    """The highlight: a rounded gold outline, 5 px wide, radius 14 at a 1080 px tall image (k = image height / 1080)."""
-    ImageDraw.Draw(img).rounded_rectangle(b, round(14 * k), outline=GOLD, width=max(3, round(5 * k)))
+    """The highlight: a rounded pink outline, 10 px wide at a 1080 px tall image (k = image height / 1080), on a dark
+    outline so it reads on light and dark backgrounds alike."""
+    w = max(5, round(10 * k))
+    d = ImageDraw.Draw(img, "RGBA")
+    d.rounded_rectangle(b, round(16 * k), outline=(0, 0, 0, 170), width=w + 6)
+    d.rounded_rectangle(tuple(v + o for v, o in zip(b, (3, 3, -3, -3))), round(16 * k), outline=HILITE, width=w)
 
 
 def ring(img, b, k=1.0):
     """The same highlight as an ellipse (b is its bounding box), for round things like the minimap."""
-    ImageDraw.Draw(img).ellipse(b, outline=GOLD, width=max(3, round(5 * k)))
+    w = max(5, round(10 * k))
+    d = ImageDraw.Draw(img, "RGBA")
+    d.ellipse(b, outline=(0, 0, 0, 170), width=w + 6)
+    d.ellipse(tuple(v + o for v, o in zip(b, (3, 3, -3, -3))), outline=HILITE, width=w)
 
 
 def label(img, text, xy, size, anchor="la"):
@@ -170,31 +179,26 @@ def pair(keys, labels, out, title, crop=None, boxes=(), top=150, gap=40, margin=
     return img
 
 
-def split(keys, labels, out, title, anchor_y=1.0, slant=220, boxes=()):
-    """One 16:9 picture of the same scene: vanilla left of a slanted line, the mod right of it. Both shots cover the
-    frame at the same scale (anchor_y 0 = keep the top, 1 = keep the bottom); boxes are in raw frame pixels."""
-    ims = [shot(k) for k in keys]
-    s = max(W / ims[0].width, H / ims[0].height)
-    sw, shh = round(ims[0].width * s), round(ims[0].height * s)
-    ox, oy = (sw - W) // 2, round((shh - H) * anchor_y)
-    a, b = (im.resize((sw, shh), Image.LANCZOS).crop((ox, oy, ox + W, oy + H)).convert("RGBA") for im in ims)
-    for p in (a, b):
-        for bx in boxes:
-            box(p, tuple(round(v * s) - o for v, o in zip(bx, (ox, oy, ox, oy))), 1.0)
-    top, bottom = W // 2 + slant // 2, W // 2 - slant // 2
-    mask = Image.new("L", (W, H), 0)
-    ImageDraw.Draw(mask).polygon([(0, 0), (top, 0), (bottom, H), (0, H)], fill=255)
-    img = b.copy()
-    img.paste(a, (0, 0), mask)
-    line = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    ImageDraw.Draw(line).line([(top, 0), (bottom, H)], fill=(0, 0, 0, 200), width=14)
-    img.alpha_composite(line.filter(ImageFilter.GaussianBlur(6)))
-    ImageDraw.Draw(img).line([(top, 0), (bottom, H)], fill=GOLD, width=5)
-    label(img, labels[0], (40, 150), 44)
-    label(img, labels[1], (W - 40, 150), 44, anchor="ra")
-    label(img, title, (W // 2, 70), 56, anchor="mm")
+def overview(cols, out, title, crop):
+    """Several screens at once: vanilla on the top row, the mod on the bottom row, one column per screen with its name
+    above; every shot cropped to the same frame area (crop, raw frame pixels)."""
+    img = neutral_backdrop()
+    top, margin, gap, name_h = 140, 30, 24, 46
+    n = len(cols)
+    cw, ch = crop[2] - crop[0], crop[3] - crop[1]
+    s = min((W - 2 * margin - (n - 1) * gap) / (n * cw), (H - top - margin - name_h - gap) / (2 * ch))
+    pw, ph = round(cw * s), round(ch * s)
+    x0 = (W - n * pw - (n - 1) * gap) // 2
+    y0 = top + name_h + (H - top - margin - name_h - gap - 2 * ph) // 2
+    for i, (v, m, name) in enumerate(cols):
+        x = x0 + i * (pw + gap)
+        label(img, name, (x + pw // 2, y0 - name_h // 2 - 4), 32, anchor="mm")
+        for row, (key, lbl) in enumerate(((v, "Vanilla"), (m, "With mod"))):
+            y = y0 + row * (ph + gap)
+            shadowed_paste(img, shot(key).crop(crop).resize((pw, ph), Image.LANCZOS).convert("RGBA"), (x, y), edge=True)
+            label(img, lbl, (x + 12, y + 12), 26)
+    label(img, title, (W // 2, top // 2), 52, anchor="mm")
     save(img, out)
-    return img
 
 
 def main_image():
@@ -260,13 +264,14 @@ def thumbs(img):
 
 # 5:4 HUD shots (frame pixels): the minimap is a tall oval in vanilla and a smaller circle with the mod; the health
 # bar only exists with the mod (vanilla pushes it off screen)
-MAP_V54 = (2050, 1340, 2830, 2265)
-MAP_M54 = (2245, 1655, 2855, 2265)
-HEALTH_M54 = (600, 1655, 905, 2105)
+MAP_V54 = (2005, 1300, 2870, 2300)
+MAP_M54 = (2195, 1610, 2875, 2300)
+HEALTH_M54 = (570, 1625, 935, 2135)
 
 if __name__ == "__main__":
     for stale in ("02_43_hud.jpg", "03_43_shop.jpg", "04_54_hud.jpg", "05_sizes.jpg", "04_54_roster.jpg",
-                  "05_54_graphs.jpg", "06_54_profile.jpg", "07_sizes.jpg"):   # earlier galleries
+                  "05_54_graphs.jpg", "06_54_profile.jpg", "07_sizes.jpg", "04_54_dialogue.jpg",
+                  "05_54_profile.jpg", "06_sizes.jpg"):   # earlier galleries
         if os.path.exists(os.path.join(OUT, stale)):
             os.remove(os.path.join(OUT, stale))
     tile = main_image()
@@ -274,12 +279,12 @@ if __name__ == "__main__":
     v_m = ("Vanilla", "With mod")
     pair(("v_54_hud", "m_54_hud"), v_m, "02_54_hud.jpg", "5:4: health bar back, HUD no longer stretched",
          marks=((("ring", MAP_V54),), (("box", HEALTH_M54), ("ring", MAP_M54))))
-    pair(("v_54_catalog", "m_54_catalog"), v_m, "03_54_items.jpg", "5:4 shop: the item pages use the full height")
-    if os.path.exists(os.path.join(RAW, "v_54_dialogue.png")):
-        # the vanilla snip ends 140 px above the frame's bottom (only the ESC BACK row): both cropped to match
-        pair(("v_54_dialogue", "m_54_dialogue"), v_m, "04_54_dialogue.jpg",
-             "Dialogue player: more lines on screen", crop=(0, 0, 2878, 2164))
-    pair(("v_54_profile", "m_54_profile"), v_m, "05_54_profile.jpg", "Player page: nothing cut off")
+    pair(("v_54_catalog", "m_54_catalog"), v_m, "03_54_items.jpg", "5:4 shop: your hero in view, nothing overlaps")
+    pair(("v_54_profile", "m_54_profile"), v_m, "04_54_profile.jpg", "Player page: nothing cut off")
+    # the dialogue snip ends 140 px above the frame's bottom (only the ESC BACK row): all cropped to match
+    overview((("v_54_roster", "m_54_roster", "Hero select"), ("v_54_graphs", "m_54_graphs", "Post-match graphs"),
+              ("v_54_dialogue", "m_54_dialogue", "Dialogue player")),
+             "05_54_other.jpg", "Also changed on tall screens", crop=(0, 0, 2878, 2164))
     sizes()
     if "--thumbs" in sys.argv:
         thumbs(tile)
