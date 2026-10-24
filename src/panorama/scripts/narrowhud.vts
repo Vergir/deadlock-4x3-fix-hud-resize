@@ -727,29 +727,39 @@
 
     // Main menu pages laid out for 1080px whose content (cards in pages the game rebuilds) keeps its vanilla
     // size and moves down by half the extra height, by the top margin of one element (`part`, vanilla `top`).
-    // The page fits itself to a 1920-wide layout first (fitPanel):
+    // The page first fits itself to the width it needs (needW, at most the menu's scale); `title` is an element
+    // that moves down with the content (its vanilla top margin):
     //  - Watch Matches (citadel_db_page_watch): .MatchContents, the filters and 4 rows of match cards (2 rows of
-    //    taller featured cards on the first pages), 170px down; the title stays at the top. At the game's 1440
-    //    units its 2x2 grid breaks into one column.
-    // Growing the cards to fill the height was tried (also with each card's content centred); the user
-    // preferred centring. Match history had the same treatment until menus got vanilla size: at 1440 units the
-    // game's own 4:3 layout fits.
+    //    taller featured cards on the first pages), 170px down; the title (#WatchTitle, 90px down) moves with it.
+    //    It needs 1660 units across (the grid); at the game's 1440 units its 2x2 grid breaks into one column.
+    // Growing the cards to use the height was tried (taller cards; with their content centred; with bigger
+    // avatars and score); the user kept vanilla-size cards. Match history had the same treatment until menus got
+    // vanilla size: at 1440 units the game's own 4:3 layout fits.
     var CENTRED_PAGES = [
-        { type: "CitadelWatchPage", top: 170, part: function (p) { return findClass(p, "MatchContents"); } }
+        { type: "CitadelWatchPage", top: 170, part: function (p) { return findClass(p, "MatchContents"); },
+          needW: 1660 + 80, title: { top: 90, part: function (p) { return p.FindChild("WatchTitle"); } } }
     ];
+    // scale for a page that needs needW units across, relative to its parent (option A: never above the menu's)
+    function fitWidthK(page, needW) {
+        var parent = page.GetParent(), u = parent && parent.actualuiscale_x;
+        if (!(u > 0) || !(parent.actuallayoutwidth > 0)) { return 1; }
+        return Math.min(1, parent.actuallayoutwidth / u / needW);
+    }
     function fixCentredPages() {
         for (var i = 0; i < CENTRED_PAGES.length; i++) {
             var spec = CENTRED_PAGES[i], page = menuPages[spec.type];
             if (!page || !page.IsValid()) { page = menuPages[spec.type] = dashboardPage(spec.type); }
             if (!page) { continue; }
-            fitPanel(page, menuFitK);
+            fitPanel(page, spec.needW ? fitWidthK(page, spec.needW) : menuFitK);
             var size = pageSize(page);
             if (!size) { continue; }
-            var extra = Math.max(0, size.h - 1080), key = extra.toFixed(0);
+            var extra = Math.max(0, size.h - 1080), shift = extra / 2, key = extra.toFixed(0);
             if (page.GetAttributeString("narrowhud_centred", "") === key) { continue; }
             var part = spec.part(page);
             if (!part) { continue; }
-            part.style.marginTop = (spec.top + extra / 2).toFixed(2) + "px";
+            part.style.marginTop = (spec.top + shift).toFixed(2) + "px";
+            var title = spec.title && spec.title.part(page);
+            if (title) { title.style.marginTop = (spec.title.top + shift).toFixed(2) + "px"; }
             page.SetAttributeString("narrowhud_centred", key);
             log(spec.type + ": centred, extra=" + key);
         }
