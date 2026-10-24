@@ -427,6 +427,41 @@
     // taller canvas leaves the bottom empty: the list box grows by the extra height, like the shop (centring
     // the vanilla-sized content instead was the alternative; the user preferred filling).
     var popupMgr = null;
+    // Hero select / create roster popup (popups/citadel_popup_roster_select): laid out for a 1080px canvas. On
+    // the left, a header and #GridContainer (800x710) with the hero cards in #RosterHeroes (75x124, 4px margins,
+    // 20px padding, 9 per row) from the top; PLAY is pinned to the bottom and the hero art on the right fills
+    // the screen by itself. The grid gets the extra height and the cards grow with it: ui-scale k on
+    // #RosterHeroes, its width held at the grid's 800px so fewer cards fit per row, k the largest whose rows
+    // still fit. (Spreading the rows apart and centring the vanilla grid were tried; the user chose this.)
+    var CARD_W = 75 + 8, CARD_H = 124 + 8, GRID_PAD = 40;
+    function rosterScale(count, gridH) {
+        for (var k = 2; k > 1; k -= 0.01) {
+            var cols = Math.floor((800 / k - GRID_PAD) / CARD_W);
+            if (cols < 1) { continue; }
+            if (Math.ceil(count / cols) * CARD_H + GRID_PAD <= gridH / k) { return k; }
+        }
+        return 1;
+    }
+    function fixRosterSelect() {
+        if (!popupMgr || !popupMgr.IsValid()) { return; }
+        for (var i = 0, n = popupMgr.GetChildCount(); i < n; i++) {
+            var p = popupMgr.GetChild(i);
+            if (!p || p.paneltype !== "CitadelPopupRosterSelect") { continue; }
+            var size = pageSize(p);
+            var grid = p.FindChildTraverse("GridContainer"), cards = grid && grid.FindChild("RosterHeroes");
+            if (!size || !cards) { continue; }
+            var extra = Math.max(0, size.h - 1080), count = cards.GetChildCount();
+            var key = extra.toFixed(0) + "/" + count;
+            if (extra < 1 || p.GetAttributeString("narrowhud_roster", "") === key) { continue; }
+            var k = rosterScale(count, 710 + extra);
+            grid.style.height = (710 + extra).toFixed(2) + "px";
+            cards.style.uiScale = (k * 100).toFixed(2) + "% " + (k * 100).toFixed(2) + "% 100%";
+            cards.style.width = (800 / k).toFixed(2) + "px";
+            p.SetAttributeString("narrowhud_roster", key);
+            log("roster select: extra=" + extra.toFixed(0) + " cards=" + count + " k=" + k.toFixed(2));
+        }
+    }
+
     function fixBuildBrowser() {
         if (!popupMgr || !popupMgr.IsValid()) { return; }
         var n = popupMgr.GetChildCount();
@@ -451,6 +486,7 @@
         if (!alive()) { return; }
         try { applyShopMode(false); } catch (e) { log("shop error: " + e); }
         try { fixBuildBrowser(); } catch (e) { log("build browser error: " + e); }
+        try { fixRosterSelect(); } catch (e) { log("roster select error: " + e); }
         try { fixCentredPages(); } catch (e) { log("centred page error: " + e); }
         try { fixPostGame(); } catch (e) { log("post-game error: " + e); }
         try { fixMenuPages(); } catch (e) { log("menu page error: " + e); }
