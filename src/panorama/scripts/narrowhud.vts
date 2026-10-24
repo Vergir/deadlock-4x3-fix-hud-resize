@@ -786,12 +786,19 @@
         var board = sbScreen && sbScreen.FindChild("Scoreboard");
         var scroll = board && findClass(board, "ScoreboardScrollContainer");
         if (scroll) {
-            fitPanel(board, Math.min(menuFitK, size.h / 1080));
+            // as large as the widest team table (measured, plus 40 a side) allows, never above the menu's scale
+            var need = 0;
+            for (var t = 0, nt = scroll.GetChildCount(); t < nt; t++) {
+                var tc = scroll.GetChild(t);
+                if (tc && tc.actualuiscale_x > 0) { need = Math.max(need, tc.actuallayoutwidth / tc.actualuiscale_x); }
+            }
+            var kw = need > 0 ? Math.min(1, size.w / (need + 80)) : menuFitK;
+            fitPanel(board, Math.min(Math.round(kw * 200) / 200, size.h / 1080));
             var bs = pageSize(board), sbExtra = bs ? Math.max(0, bs.h - 1080) : 0, sbKey = sbExtra.toFixed(0);
             if (bs && board.GetAttributeString("narrowhud_sb", "") !== sbKey) {
                 scroll.style.marginTop = (sbExtra / 2).toFixed(2) + "px";
                 board.SetAttributeString("narrowhud_sb", sbKey);
-                log("post-game scoreboard: extra=" + sbKey);
+                log("post-game scoreboard: extra=" + sbKey + " table=" + need.toFixed(0) + " k=" + kw.toFixed(3));
             }
         }
 
