@@ -1,12 +1,12 @@
-# HUD Resize & 4:3 / 5:4 Fix
+# 4:3 / 5:4 Fix & HUD Resize
 
-![HUD Resize & 4:3 / 5:4 Fix: vanilla 4:3 HUD without the health bar next to the fixed one](docs/images/header.jpg)
+![4:3 / 5:4 Fix & HUD Resize: vanilla 4:3 HUD without the health bar next to the fixed one](docs/images/header.jpg)
 
 Play Deadlock on a 4:3, 5:4 or other narrow screen with a complete, un-stretched HUD, and pick the
 HUD size on any screen. Only the interface changes; gameplay, resolution and field of view stay as
 they are.
 
-Download: [GameBanana](https://gamebanana.com/mods/728787) · [GitHub releases](https://github.com/Vergir/deadlock-hud-resize/releases/latest)
+Download: [GameBanana](https://gamebanana.com/mods/728787) · [GitHub releases](https://github.com/Vergir/deadlock-4x3-fix-hud-resize/releases/latest)
 
 ## Features
 
@@ -17,9 +17,13 @@ Download: [GameBanana](https://gamebanana.com/mods/728787) · [GitHub releases](
   there it changes nothing; the other sizes shrink or enlarge the whole HUD and the menus.
 - **Crosshair:** shows the real bullet spread at every HUD size. On narrow screens it is round;
   vanilla stretches it there and shows the spread about twice as wide as it is.
-- **Shop:** stays at its normal size when the HUD is larger, so it always fits; Quick Buy, souls and
-  items take the shop's size while it is open.
+- **Shop:** stays at its normal size when the HUD is larger, so it always fits; Quick Buy, souls,
+  items and the build editor take the shop's size while it is open.
 - **Menus:** the main menu, Esc menu, settings, tooltips and scoreboard get the same correction.
+- **Tall screens (4:3, 5:4, 9:8 ...):** the screens built for 16:9 use the extra height instead of
+  leaving it empty: the shop and its item pages, the build browser, hero select (larger hero cards),
+  the post-match graphs, the player page and the dialogue player fill it; Watch Matches, match history
+  and the post-match scoreboard are centred in it.
 
 ## What it does not do
 
@@ -33,7 +37,7 @@ With **Deadlock Mod Manager**: install the mod from its GameBanana page and pick
 
 Manually:
 
-1. Download one size, e.g. `deadlock-hud-resize-v1.0.1-size1.0.zip`. Size 1.0 is the plain fix; pick another
+1. Download one size, e.g. `deadlock-4x3-fix-hud-resize-v1.1.0-size1.0.zip`. Size 1.0 is the plain fix; pick another
    size for a smaller or larger HUD.
 2. Copy `pak01_dir.vpk` from the zip into `Deadlock\game\citadel\addons\` (create the folder if needed).
    If a `pak01_dir.vpk` from another mod is already there, rename this one to the next free number
@@ -55,7 +59,7 @@ Manually:
 
 ## Compatibility
 
-- **Game version:** tested with Deadlock build 6793 (October 16, 2026) on Windows.
+- **Game version:** tested with Deadlock build 6819 (October 24, 2026) on Windows.
 - **After a game update:** the mod replaces three small UI files (`hud_data_feed.xml`,
   `citadel_dashboard_footer_bar.xml`, `npc_icons.css`). If an update changes one of them, the HUD
   falls back to vanilla, or the game stops at launch with an error naming the file; delete the vpk

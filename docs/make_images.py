@@ -21,7 +21,7 @@ OUT = os.path.join(RAW, "gamebanana")
 FONT = "C:/Windows/Fonts/segoeuib.ttf"
 GOLD = (216, 201, 163)
 W, H = 1920, 1080
-TITLE = "HUD Resize & 4:3 / 5:4 Fix"
+TITLE = "4:3 / 5:4 Fix & HUD Resize"
 
 # The game frame inside each snip (left, top, right, bottom), found from the window edges.
 FRAMES = {

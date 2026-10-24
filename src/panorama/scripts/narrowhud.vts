@@ -1,5 +1,5 @@
 "use strict";
-// HUD Resize & 4:3 / 5:4 Fix: un-stretches and resizes the Panorama UI.
+// 4:3 / 5:4 Fix & HUD Resize: un-stretches and resizes the Panorama UI.
 // The engine lays screens narrower than 16:10 out on a 1440x1080 canvas and stretches it to the
 // screen, so the X and Y scales differ. This script measures the real scales on the UI root and
 // rescales the root's top-level containers: on narrow screens the UI becomes uniform and as large as

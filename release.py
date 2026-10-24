@@ -1,5 +1,5 @@
 """Produce shareable packages: build/dist/<name>/pak01_dir.vpk + INSTALL.txt for several UI sizes,
-zipped as deadlock-hud-resize-v<version>-size<size>.zip (the version is in the name because
+zipped as deadlock-4x3-fix-hud-resize-v<version>-size<size>.zip (the version is in the name because
 GameBanana mangles re-uploads of a file with an unchanged name).
 The script inside the mod measures the screen itself, so one package works for any narrow
 display; the size variants only change how large the HUD is (1.0 = same as a 16:9 screen of
@@ -24,7 +24,7 @@ if dist.exists():
     shutil.rmtree(dist)
 dist.mkdir(parents=True)
 for size in SIZES:
-    name = f"deadlock-hud-resize-v{version}-size{size}"
+    name = f"deadlock-4x3-fix-hud-resize-v{version}-size{size}"
     d = dist / name
     vpk = build(False, float(size), "", out_dir=d)
     shutil.rmtree(d / "stage")

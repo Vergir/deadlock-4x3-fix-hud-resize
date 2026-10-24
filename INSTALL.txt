@@ -1,4 +1,4 @@
-HUD Resize & 4:3 / 5:4 Fix (Deadlock)
+4:3 / 5:4 Fix & HUD Resize (Deadlock)
 =====================================
 A complete, un-stretched HUD on 4:3, 5:4 and other narrow screens, and a HUD size of your choice on
 any screen. Only the interface changes. Each zip is one HUD size: size1.0 is the plain fix (on 16:9
@@ -26,4 +26,4 @@ Manually:
 
 Uninstall: delete the vpk from the addons folder.
 
-Source, issues and all sizes: https://github.com/Vergir/deadlock-hud-resize
+Source, issues and all sizes: https://github.com/Vergir/deadlock-4x3-fix-hud-resize

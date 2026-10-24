@@ -1,4 +1,4 @@
-"""Build the HUD Resize & 4:3 / 5:4 Fix addon.
+"""Build the 4:3 / 5:4 Fix & HUD Resize addon.
 
 Usage:  python build.py [--ui-size 1.0] [--hud-aspect W:H] [--fov-aspect R] [--test]
   --ui-size     HUD size, 1.0 = vanilla size on 16:9 (0.5 ... 1.5 are shipped)

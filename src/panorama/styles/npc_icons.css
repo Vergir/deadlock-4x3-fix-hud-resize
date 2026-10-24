@@ -1,5 +1,5 @@
 /* ---------------------------------------------------------------------------
-   HUD Resize & 4:3 / 5:4 Fix - overrides panorama/styles/npc_icons.vcss
+   4:3 / 5:4 Fix & HUD Resize - overrides panorama/styles/npc_icons.vcss
    The first block is the vanilla file content (keep in sync with the game).
    Everything below "HUD RESIZE" is the mod. Rules are scoped to the aspect ratio
    classes the engine puts on the HUD root; at UI size 1.0 they reproduce the

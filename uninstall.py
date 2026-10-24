@@ -3,7 +3,7 @@ the personal gameinfo.gi convars listed in local_settings.json (e.g. r_aspectrat
 launch options (e.g. -w 2880 -h 1620; Steam is restarted if needed).
 `python install.py` puts everything back.
 
-    python uninstall.py
+    python uninstall.py [--launch NAME]
 
 The citadel/addons search path stays in gameinfo.gi: Deadlock Mod Manager uses it too, and with no
 VPKs in the folder it changes nothing.
@@ -32,4 +32,4 @@ if __name__ == "__main__":
     remove_loose()
     for name in SETTINGS.get("gameinfo_convars", {}):
         set_convar(name, "")
-    set_launch_options("vanilla")
+    set_launch_options(sys.argv[sys.argv.index("--launch") + 1] if "--launch" in sys.argv else "vanilla")
