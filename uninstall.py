@@ -1,6 +1,6 @@
 """Undo install.py to compare with vanilla: remove addons/pak99_dir.vpk (or the --loose files), remove
 the personal gameinfo.gi convars listed in local_settings.json (e.g. r_aspectratio) and set the "vanilla" Steam
-launch options (no -w/-h: the game uses the resolution in video.txt; Steam is restarted if needed).
+launch options (e.g. -w 2880 -h 1620; Steam is restarted if needed).
 `python install.py` puts everything back.
 
     python uninstall.py

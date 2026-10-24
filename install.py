@@ -2,7 +2,7 @@
 citadel/addons. Safe to re-run after every game update (Steam verifies/overwrites gameinfo.gi,
 which drops the addons line).
 
-    python install.py [--loose] [--aspect-convar VALUE]
+    python install.py [--loose] [--launch NAME] [--aspect-convar VALUE]
 
 --loose (development) installs the script as a loose file under addons/ and only layouts and styles
 in the VPK, so script changes can be installed while the game runs. A normal install removes it again.
@@ -250,4 +250,5 @@ if __name__ == "__main__":
         set_convar(name, str(value))
     if "--aspect-convar" in sys.argv:
         set_convar("r_aspectratio", sys.argv[sys.argv.index("--aspect-convar") + 1])
-    set_launch_options("modded")
+    # --launch NAME picks another local_settings.json launch_options entry (e.g. "vanilla" for 16:9 tests)
+    set_launch_options(sys.argv[sys.argv.index("--launch") + 1] if "--launch" in sys.argv else "modded")

@@ -725,8 +725,9 @@
 
     // Post-match page (post_game/citadel_db_page_post_game_new): a carousel of screens laid out for 1080px. Only
     // two are changed (the team and MVP screens are left alone), each inside its own screen:
-    //  - #ScoreboardScreen: match info and two teams of 6 player rows, from the top; it keeps its vanilla size
-    //    and moves down by half the extra height (spreading the rows out to fill it was tried, not kept).
+    //  - #ScoreboardScreen: match info and two teams of 6 player rows, from the top. On a taller page it keeps
+    //    its vanilla size and moves down by half the extra height (spreading the rows out was tried, not kept);
+    //    on a shorter one it is scaled down to fit.
     //  - #GraphsScreen (match_details_graphs): the graph column (.MainCol, max 780px) and the graph in it
     //    (.GraphCtn and the UICanvas #Graph, 700px) grow by the extra height; the lane-stats view shares .MainCol.
     var postGamePage = null;
@@ -740,10 +741,18 @@
         var sbScreen = postGamePage.FindChildTraverse("ScoreboardScreen");
         var board = sbScreen && sbScreen.FindChild("Scoreboard");
         var scroll = board && findClass(board, "ScoreboardScrollContainer");
-        if (scroll && board.GetAttributeString("narrowhud_sb", "") !== key) {
+        // on a page shorter than 1080px (UI size above 1 on a wide screen) the scoreboard does not fit and runs
+        // into the footer buttons: it is shown at k = height / 1080, laid out in a 1080px-tall box
+        var k = Math.min(1, size.h / 1080), sbKey = key + "/" + k.toFixed(3);
+        if (scroll && board.GetAttributeString("narrowhud_sb", "") !== sbKey) {
             scroll.style.marginTop = (extra / 2).toFixed(2) + "px";
-            board.SetAttributeString("narrowhud_sb", key);
-            log("post-game scoreboard: extra=" + key);
+            if (k < 1) {
+                board.style.uiScale = (k * 100).toFixed(2) + "% " + (k * 100).toFixed(2) + "% 100%";
+                board.style.width = (size.w / k).toFixed(2) + "px";
+                board.style.height = "1080px";
+            }
+            board.SetAttributeString("narrowhud_sb", sbKey);
+            log("post-game scoreboard: extra=" + key + " k=" + k.toFixed(3));
         }
 
         var grScreen = postGamePage.FindChildTraverse("GraphsScreen");
