@@ -452,6 +452,7 @@
         try { applyShopMode(false); } catch (e) { log("shop error: " + e); }
         try { fixBuildBrowser(); } catch (e) { log("build browser error: " + e); }
         try { fixCentredPages(); } catch (e) { log("centred page error: " + e); }
+        try { fixPostGame(); } catch (e) { log("post-game error: " + e); }
         try { fixMenuPages(); } catch (e) { log("menu page error: " + e); }
         $.Schedule(0.05, watchShop);
     }
@@ -683,6 +684,42 @@
             part.style.marginTop = (spec.top + extra / 2).toFixed(2) + "px";
             page.SetAttributeString("narrowhud_centred", key);
             log(spec.type + ": centred, extra=" + key);
+        }
+    }
+
+    // Post-match page (post_game/citadel_db_page_post_game_new): a carousel of screens laid out for 1080px. Only
+    // two are changed (the team and MVP screens are left alone), each inside its own screen:
+    //  - #ScoreboardScreen: match info and two teams of 6 player rows, from the top; it keeps its vanilla size
+    //    and moves down by half the extra height (spreading the rows out to fill it was tried, not kept).
+    //  - #GraphsScreen (match_details_graphs): the graph column (.MainCol, max 780px) and the graph in it
+    //    (.GraphCtn and the UICanvas #Graph, 700px) grow by the extra height; the lane-stats view shares .MainCol.
+    var postGamePage = null;
+    function fixPostGame() {
+        if (!postGamePage || !postGamePage.IsValid()) { postGamePage = dashboardPage("CitadelPostGameNew"); }
+        if (!postGamePage) { return; }
+        var size = pageSize(postGamePage);
+        if (!size) { return; }
+        var extra = Math.max(0, size.h - 1080), key = extra.toFixed(0);
+
+        var sbScreen = postGamePage.FindChildTraverse("ScoreboardScreen");
+        var board = sbScreen && sbScreen.FindChild("Scoreboard");
+        var scroll = board && findClass(board, "ScoreboardScrollContainer");
+        if (scroll && board.GetAttributeString("narrowhud_sb", "") !== key) {
+            scroll.style.marginTop = (extra / 2).toFixed(2) + "px";
+            board.SetAttributeString("narrowhud_sb", key);
+            log("post-game scoreboard: extra=" + key);
+        }
+
+        var grScreen = postGamePage.FindChildTraverse("GraphsScreen");
+        var graphs = grScreen && grScreen.FindChild("Graphs");
+        var col = graphs && findClass(graphs, "MainCol"), ctn = graphs && findClass(graphs, "GraphCtn");
+        var canvas = ctn && ctn.FindChild("Graph");
+        if (col && ctn && canvas && graphs.GetAttributeString("narrowhud_graphs", "") !== key) {
+            col.style.maxHeight = (780 + extra).toFixed(2) + "px";
+            ctn.style.height = (700 + extra).toFixed(2) + "px";
+            canvas.style.height = (700 + extra).toFixed(2) + "px";
+            graphs.SetAttributeString("narrowhud_graphs", key);
+            log("post-game graphs: extra=" + key);
         }
     }
 
