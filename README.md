@@ -1,6 +1,6 @@
 # 4:3 / 5:4 Fix & HUD Resize
 
-![4:3 / 5:4 Fix & HUD Resize: vanilla 4:3 HUD without the health bar next to the fixed one](docs/images/header.jpg)
+![4:3 / 5:4 Fix & HUD Resize: the vanilla 5:4 shop, stretched and cut off, next to the full shop with the mod](docs/images/header.jpg)
 
 Play Deadlock on a 4:3, 5:4 or other narrow screen with a complete, un-stretched HUD, and pick the
 HUD size on any screen. Only the interface changes; gameplay, resolution and field of view stay as

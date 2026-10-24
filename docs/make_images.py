@@ -33,6 +33,14 @@ FRAMES = {
     "v_169_hud": (0, 41, 2878, 1661), "m_169_hud": (0, 89, 2878, 1709),
     "s07_169_hud": (0, 51, 2878, 1671), "s13_169_hud": (0, 51, 2878, 1671),
 }
+# 1.1.0 shots (5:4): the 2880x2304 game frame, top edge found from the Steam window around it
+for _k, _t in {"v_54_shop": 40, "v_54_catalog": 40, "v_54_roster": 34, "v_54_graphs": 47, "v_54_profile": 50,
+               "v_54_hud": 34, "m_54_shop": 44, "m_54_catalog": 49, "m_54_roster": 43, "m_54_graphs": 37,
+               "m_54_profile": 43, "m_54_hud": 46}.items():
+    FRAMES[_k] = (0, _t, 2878, _t + 2304)
+
+# Areas blurred before cropping (raw snip pixels): the author's friend code on the player page.
+BLUR = {"v_54_profile": [(640, 300, 768, 338)], "m_54_profile": [(464, 214, 558, 246)]}
 
 _cache = {}
 
@@ -41,7 +49,7 @@ def hide_fps(im):
     """Paint out the game's FPS counter in the bottom-right corner (bright text pixels, inpainted)."""
     a = np.asarray(im).copy()
     h, w = a.shape[:2]
-    l, t, r, b = w - 340, h - 75, w - 5, h - 5
+    l, t, r, b = w - 420, h - 75, w - 5, h - 5
     reg = a[t:b, l:r].astype(int)
     g = reg.mean(axis=2)
     m = (g > 120) | ((reg[:, :, 0] - reg[:, :, 1]) > 50)
@@ -53,7 +61,10 @@ def hide_fps(im):
 
 def shot(key):
     if key not in _cache:
-        im = Image.open(os.path.join(RAW, key + ".png")).convert("RGB").crop(FRAMES[key])
+        im = Image.open(os.path.join(RAW, key + ".png")).convert("RGB")
+        for b in BLUR.get(key, ()):
+            im.paste(im.crop(b).filter(ImageFilter.GaussianBlur(9)), b[:2])
+        im = im.crop(FRAMES[key])
         _cache[key] = hide_fps(im)
     return _cache[key]
 
@@ -134,36 +145,33 @@ def pair(keys, labels, out, title, crop=None, boxes=(), top=150, gap=40, margin=
     return img
 
 
-# Health bar on a 2880x2160 (4:3) frame at size 1.0: 1.5 px per HUD unit, container at x 315, 300 wide, 456 tall,
-# 20 above the bottom of the 1440-unit-tall canvas.
+# Health bar at size 1.0: 1.5 px per HUD unit, container at x 315, 300 wide, 456 tall, 20 above the bottom of the
+# canvas (1440 units tall on 4:3, 1536 on 5:4).
 HEALTH_43 = (440, 1430, 960, 2150)
+HEALTH_54 = (440, 1574, 960, 2294)
 
 
 def main_image():
-    """Main image = listing tile: the bottom-left of a 4:3 screen, vanilla (no health bar) vs with the mod."""
-    return pair(("v_43_hud", "m_43_hud"), ("Vanilla", "With mod"), "01_main.jpg", "#" + TITLE,
-                crop=(0, 900, 1680, 2160), boxes=[HEALTH_43], top=190)
+    """Main image = listing tile: the 5:4 shop, vanilla (stretched, cut off on the right) vs with the mod (full)."""
+    return pair(("v_54_shop", "m_54_shop"), ("Vanilla", "With mod"), "01_main.jpg", "#" + TITLE, top=190)
 
 
 def header():
     """README header, 1300x372: the main image's comparison, smaller, under the title. Also copied to docs/images/,
     the only image that is committed."""
     hw, hh = 1300, 372
-    im = shot("m_43_hud")
+    im = shot("m_54_shop")
     s = max(hw / im.width, hh / im.height)
     bg = im.resize((round(im.width * s), round(im.height * s)), Image.LANCZOS)
     y0 = (bg.height - hh) // 2
     img = ImageEnhance.Brightness(bg.crop((0, y0, hw, y0 + hh)).filter(ImageFilter.GaussianBlur(10))).enhance(0.7)
     img = img.convert("RGBA")
     outlined(img, TITLE, (hw // 2, 54), 58)
-    crop = (0, 900, 1680, 2160)
     ph, gap = 250, 28
-    pw = round(ph * (crop[2] - crop[0]) / (crop[3] - crop[1]))
+    pw = round(ph * im.width / im.height)
     x = (hw - 2 * pw - gap) // 2
-    for k, lbl in (("v_43_hud", "Vanilla"), ("m_43_hud", "With mod")):
-        p = shot(k).crop(crop).resize((pw, ph), Image.LANCZOS).convert("RGBA")
-        sc = ph / (crop[3] - crop[1])
-        box(p, tuple(round((v - o) * sc) for v, o in zip(HEALTH_43, (0, 900, 0, 900))), ph / 1080 * 2)
+    for k, lbl in (("v_54_shop", "Vanilla"), ("m_54_shop", "With mod")):
+        p = shot(k).resize((pw, ph), Image.LANCZOS).convert("RGBA")
         shadowed_paste(img, p, (x, 100))
         label(img, lbl, (x + 10, 110), 24)
         x += pw + gap
@@ -197,7 +205,7 @@ def sizes():
         label(img, lbl, (x + 16, y + 16), 40)
         x += pw + gap
     label(img, "16:9: pick your HUD size (0.5 to 1.5)", (W // 2, top // 2), 56, anchor="mm")
-    save(img, "05_sizes.jpg")
+    save(img, "07_sizes.jpg")
 
 
 def thumbs(img):
@@ -209,14 +217,17 @@ def thumbs(img):
 
 
 if __name__ == "__main__":
+    for stale in ("02_43_hud.jpg", "03_43_shop.jpg", "04_54_hud.jpg", "05_sizes.jpg"):   # the 1.0 gallery
+        if os.path.exists(os.path.join(OUT, stale)):
+            os.remove(os.path.join(OUT, stale))
     tile = main_image()
     header()
-    pair(("v_43_hud", "m_43_hud"), ("Vanilla", "With mod"), "02_43_hud.jpg", "4:3: the health bar is back",
-         boxes=[HEALTH_43])
-    pair(("v_43_shop", "m_43_shop"), ("Vanilla", "With mod"), "03_43_shop.jpg",
-         "4:3 shop: Quick Buy no longer covers the items")
-    pair(("v_54_hud", "m_54_hud"), ("Vanilla", "With mod"), "04_54_hud.jpg",
-         "5:4: health bar back, HUD no longer stretched")
+    v_m = ("Vanilla", "With mod")
+    pair(("v_54_hud", "m_54_hud"), v_m, "02_54_hud.jpg", "5:4: the health bar is back", boxes=[HEALTH_54])
+    pair(("v_54_catalog", "m_54_catalog"), v_m, "03_54_items.jpg", "5:4 shop: the item pages use the full height")
+    pair(("v_54_roster", "m_54_roster"), v_m, "04_54_roster.jpg", "Hero select: larger hero cards")
+    pair(("v_54_graphs", "m_54_graphs"), v_m, "05_54_graphs.jpg", "Post-match graphs use the full height")
+    pair(("v_54_profile", "m_54_profile"), v_m, "06_54_profile.jpg", "Player page: nothing cut off")
     sizes()
     if "--thumbs" in sys.argv:
         thumbs(tile)
