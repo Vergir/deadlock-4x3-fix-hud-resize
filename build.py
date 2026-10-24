@@ -8,7 +8,7 @@ Usage:  python build.py [--ui-size 1.0] [--hud-aspect W:H] [--fov-aspect R] [--t
 Without arguments the defaults come from local_settings.json when it exists.
 
 Every file under src/panorama is a template: {{UI_SIZE}}, {{HUD_ASPECT}}, {{FOV_ASPECT}},
-{{DEBUG}} are filled in, then the file is compiled into a Source 2 Panorama resource and packed
+{{DEBUG}}, {{BUILD_ID}} are filled in, then the file is compiled into a Source 2 Panorama resource and packed
 into build/mod/pak01_dir.vpk. The script measures the screen itself, so the same build works on
 any screen shape.
 
@@ -37,8 +37,11 @@ def template_values(test: bool, ui_size: float = 1.0, hud_aspect: str = "", fov_
     if hud_aspect:
         hw, hh = (float(x) for x in hud_aspect.split(":"))
         hud_r = hw / hh
+    import datetime
     return {
         "DEBUG": "true" if test else "false",
+        # test builds carry their build time (shows whether a hot reload picked up the new script)
+        "BUILD_ID": datetime.datetime.now().strftime("%H:%M:%S") if test else "release",
         "UI_SIZE": f"{ui_size:.4f}",
         "HUD_ASPECT": f"{hud_r:.6f}",
         "FOV_ASPECT": f"{fov_aspect:.6f}",

@@ -9,6 +9,10 @@
 (function () {
     var TAG = "[NarrowHUD]";
     var DEBUG = {{DEBUG}};
+    var BUILD_ID = "{{BUILD_ID}}";     // build time, to tell a hot-reloaded script from the one loaded at start
+    // Development hot reload: install.py --loose writes the version number into this literal (same width)
+    // and installs layout/narrowhud_dev_<n>.xml for it; 0 (a normal build) = no hot reload. See probeReload.
+    var DEV_SEQ = parseInt("000000", 10);
     var uiSize = {{UI_SIZE}};          // build-time UI size; 1.0 = vanilla size on 16:9 and 16:10
     var HUD_ASPECT = {{HUD_ASPECT}};   // 0 = use the whole screen; e.g. 1.0 = largest centered 1:1 square
     var FOV_ASPECT = {{FOV_ASPECT}};   // personal r_aspectratio (private builds only) for the crosshair; 0 = default
@@ -25,6 +29,7 @@
     var dbg = null;
     var last = "";
     var lastError = "";   // shown on the debug label; everything else goes to the console only
+    var lastDbgText = "", lastDbgTime = 0;
 
     function log(m) {
         $.Msg(TAG + " " + m);
@@ -119,26 +124,57 @@
     }
 
     // The shop's layout is built for the reference canvas width (1920px, or the engine's own width on
-    // an unstretched screen, e.g. 1728 on 16:10). With UI Size above 1 the HUD canvas is narrower than
-    // that and the shop would collide with the quick-buy panel, so the shop keeps the largest size
-    // that still fits: its own canvas is held at the reference width.
-    // The shop is also laid out for a 1080px-tall canvas: on a taller canvas it leaves the bottom empty,
-    // so give it a 1080px-tall box centered vertically, and move the quick-buy column down with it.
+    // an unstretched screen, e.g. 1728 on 16:10), so its own canvas is held at that width whatever the
+    // UI Size: it always fills the screen width like a vanilla 16:9 shop (larger sizes would make it
+    // collide with the quick-buy panel, smaller ones would leave most of the screen empty).
+    // It is laid out for a 1080px-tall canvas: on a taller canvas the shop takes the whole height and its
+    // fixed-height parts (main window, build editor backdrop, quick-buy queue) grow by the extra height.
+    // Below the main window vanilla leaves 100px for the HUD's ability bar (which stays visible); that bar is
+    // HUD-sized, 1/s shop units per HUD unit, so the space is kept at 100 HUD units.
+    var SHOP_REF_H = 1080, SHOP_MAIN_H = 960, SHOP_MAIN_TOP = 20, SHOP_MAIN_BOTTOM = 100, SHOP_BUILDBG_INSET = 74,
+        QUEUE_MAX_H = 600, QUEUE_SHOW_H = 500;
     function fixShop(hudCore, cw, ch, refW) {
         var shop = hudCore.FindChild("CitadelHudHeroShop");
         if (!shop) { return; }
-        var s = Math.min(1, cw / refW);                 // shop scale relative to the HUD canvas
-        var boxH = Math.min(ch / s, 1080);              // shop canvas height in its own units (16:9 box)
-        var offset = Math.max(0, (ch - boxH * s) / 2);  // vertical centering, in HudCore units
-        // the whole shop, backdrop included, is the centered box
+        var s = cw / refW;                              // shop scale relative to the HUD canvas
+        var shopH = ch / s;                             // shop canvas height in its own units
+        var extra = Math.max(0, shopH - SHOP_REF_H);    // height beyond the 16:9 layout
+        var mainH = shopH - SHOP_MAIN_TOP - SHOP_MAIN_BOTTOM / s;
         shop.style.uiScale = (s * 100).toFixed(4) + "% " + (s * 100).toFixed(4) + "% 100%";
-        shop.style.width = (cw / s).toFixed(2) + "px";
-        shop.style.height = boxH.toFixed(2) + "px";
-        shop.style.marginTop = offset.toFixed(2) + "px";
+        shop.style.width = refW.toFixed(2) + "px";
+        shop.style.height = shopH.toFixed(2) + "px";
+        shop.style.marginTop = "0px";
+        var main = shop.FindChildTraverse("MainPanel");
+        if (main) { main.style.height = mainH.toFixed(2) + "px"; }
         var sm = hudCore.FindChildTraverse("StatsAndModsContainer");
         var qb = hudCore.FindChildTraverse("CitadelHudQuickbuy");
-        shopMode = { sm: sm, qb: qb, s: s, cw: cw, ch: ch, offset: offset };
+        var qc = qb && qb.FindChildTraverse("QuickBuyQueueContainer");
+        var build = shop.FindChildTraverse("ShopModsSelectedBuild");
+        var filtered = shop.FindChildTraverse("ShopModsFiltered");
+        shopMode = { shop: shop, sm: sm, stats: hudCore.FindChild("hudActivePlayerStats"),
+                     builds: hudCore.FindChild("CitadelHudHeroBuilds"),
+                     queue: qc && findClass(qc, "QuickbuyQueueOuter"),
+                     lists: shop.FindChildTraverse("ShopModListsContainer"), filtered: filtered,
+                     tiers: filtered && filtered.FindChildTraverse("ModTiers"), mainH: mainH,
+                     buildBg: build && findClass(build, "BuildBG"), s: s, cw: cw, ch: ch, extra: extra,
+                     buildBgH: mainH - SHOP_BUILDBG_INSET };
         applyShopMode(true);
+    }
+
+    // first descendant (breadth-first) with a class
+    function findClass(p, cls) {
+        var queue = [p];
+        for (var seen = 0; queue.length && seen < 400; seen++) {
+            var q = queue.shift();
+            var n = q.GetChildCount();
+            for (var i = 0; i < n; i++) {
+                var c = q.GetChild(i);
+                if (!c) { continue; }
+                if (c.BHasClass(cls)) { return c; }
+                queue.push(c);
+            }
+        }
+        return null;
     }
 
     // The game places the crosshair pips (bullet spread) and ability reticles in UI units and ignores both
@@ -241,29 +277,207 @@
         return s || "\nno target elements";
     }
 
-    // While the shop is open, the lower-left group (#StatsAndModsContainer: quick-buy column, souls, items) is
-    // shown at the shop's scale so the quick-buy matches the shop; closed, it is back to vanilla (100%, full
-    // size). Vanilla already transitions this container's ui-scale. Sizes are in the container's own units.
-    // Polled every 50 ms (watchShop) so the switch follows the engine's gShopOpen class without a visible lag.
+    // While the shop is open, the lower-left group (#StatsAndModsContainer: quick-buy column, souls, items, and
+    // its sibling #hudActivePlayerStats: the weapon / spirit / vitality badges and stat list), and the build
+    // editor's left panel (#CitadelHudHeroBuilds) are shown at the shop's scale so they match the shop; closed,
+    // they are back to vanilla (100%, full size). Vanilla already
+    // transitions #StatsAndModsContainer's ui-scale. Sizes are in the containers' own units.
+    // The quick-buy queue and the build editor's backdrop grow with the shop's extra height (vanilla values
+    // when there is none; the queue's 500px cap is vanilla's for the queue shown outside the shop).
+    // Polled every 50 ms (watchShop) so the switch follows the engine's gShopOpen / gEditingBuilds classes and
+    // the catalog page without a visible lag.
     var shopMode = null, shopKey = "";
     function applyShopMode(force) {
         var m = shopMode;
         if (!m || !m.sm || !m.sm.IsValid()) { return; }
-        var open = m.sm.BHasClass("gShopOpen") && m.s < 0.999;
-        var key = [open, m.s, m.cw, m.ch, m.offset].join("|");
+        var open = m.sm.BHasClass("gShopOpen");
+        var editing = m.shop.IsValid() && m.shop.BHasClass("gEditingBuilds");
+        var tab = "";
+        try { tab = open ? catalogTab(m) : ""; } catch (e) { log("catalog tab error: " + e); }
+        try { fixCatalog(m, tab, force); } catch (e) { log("catalog error: " + e); }   // cheap, every poll
+        var key = [open, editing, tab, m.s, m.cw, m.ch].join("|");
         if (!force && key === shopKey) { return; }
         shopKey = key;
-        var k = open ? m.s : 1;
-        m.sm.style.uiScale = (k * 100).toFixed(4) + "% " + (k * 100).toFixed(4) + "% 100%";
-        m.sm.style.width = open ? (m.cw / k).toFixed(2) + "px" : "100%";
-        m.sm.style.height = open ? (m.ch / k).toFixed(2) + "px" : "100%";
-        // the quick-buy column starts at the top of the shop box (offset is in HudCore units)
-        if (m.qb && m.qb.IsValid()) { m.qb.style.marginTop = (m.offset / k).toFixed(2) + "px"; }
+        var scaled = open && Math.abs(m.s - 1) > 0.001;
+        var k = scaled ? m.s : 1;
+        var panels = [m.sm, m.stats];
+        for (var i = 0; i < panels.length; i++) {
+            var p = panels[i];
+            if (!p || !p.IsValid()) { continue; }
+            p.style.uiScale = (k * 100).toFixed(4) + "% " + (k * 100).toFixed(4) + "% 100%";
+            p.style.width = scaled ? (m.cw / k).toFixed(2) + "px" : "100%";
+            p.style.height = scaled ? (m.ch / k).toFixed(2) + "px" : "100%";
+        }
+        // the build editor's left panel (520px wide, HUD-sized) would reach over the shop's tab buttons
+        if (m.builds && m.builds.IsValid()) {
+            m.builds.style.uiScale = (k * 100).toFixed(4) + "% " + (k * 100).toFixed(4) + "% 100%";
+            m.builds.style.height = scaled ? (m.ch / k).toFixed(2) + "px" : "100%";
+        }
+        if (m.queue && m.queue.IsValid()) {
+            m.queue.style.maxHeight = (open ? QUEUE_MAX_H + m.extra : QUEUE_SHOW_H).toFixed(2) + "px";
+        }
+        if (m.buildBg && m.buildBg.IsValid()) {
+            m.buildBg.style.height = (editing ? m.buildBgH : 0).toFixed(2) + "px";
+        }
+    }
+
+    // The catalog pages draw a 1825x1618 picture behind the item lists. Vanilla fits it to the 960px-tall
+    // window: the Weapon / Spirit / Vitality pages stretch it (100% 100%), the others "cover" it, which in a
+    // window taller than the picture's shape enlarges it to the full height and cuts off its right side. So in
+    // a taller window every page stretches it, and the tier rows the Weapon / Spirit / Vitality pages place at
+    // a fixed y (vanilla citadel_shop_mods_filtered.css) move down with the picture. The stretch is measured:
+    // g = picture box height / its vanilla height, and a row that starts o below the picture's top (o: offset of
+    // #ModTiers in the picture box) moves by (y + o) * (g - 1). They are moved with margin-top, which adds to
+    // the game's x/y: `y` is an alias of `position`, so setting it also replaced the rows' x; neither alias can
+    // be unset from script (margin-top goes back to 0px, vanilla has none). Rows are cleared again on the other
+    // pages, where they flow.
+    // Runs on every 50 ms poll; a class marks the rows already moved, so new rows (the game rebuilds them) are
+    // caught within one poll and the rest cost a class check.
+    var CATALOG_TABS = ["ShowingWeaponOnly", "ShowingSpiritOnly", "ShowingVitalityOnly"];
+    var TIER_Y = { 1: 120, 2: 10, 3: 480, 4: 480 };
+    var CATALOG_IMG_ASPECT = 1825 / 1618;
+    var ROW_MARK = "NarrowHudMovedRow";
+    var movedRows = [];
+    function catalogTab(m) {
+        if (!m.filtered || !m.filtered.IsValid()) { return ""; }
+        for (var i = 0; i < CATALOG_TABS.length; i++) {
+            if (hasClassUp(m.filtered, CATALOG_TABS[i])) { return CATALOG_TABS[i]; }
+        }
+        return "";
+    }
+    var catalogInfo = "";   // for the debug label
+    // layout offsets read before the first layout pass come back as huge floats; treat those as 0 (the
+    // rows are re-measured on every 0.5 s update)
+    function sane(v) { return isFinite(v) && v > 0 && v < 2000 ? v : 0; }
+    // The price label sits on a black tab painted into the picture, the item grid (#ModLists) below it in the
+    // row's flow. The grid lands at its vanilla fraction of the picture. The label keeps its vanilla distance to
+    // the tab's centre, which the stretch moves by tab * (g - 1): the row moves by that, and the grid gets the
+    // rest as its own margin-top. TAB_PX: the tabs' vertical centres in the 1618px-tall pictures (weapon,
+    // spirit and vitality agree within 3px). (A translate on the label instead was clipped at the row's top
+    // edge and drawn under its sticker.) The grid's margin is recorded on it, so its natural offset can be
+    // measured back (also across a hot reload).
+    var TAB_PX = { 1: 281, 2: 65, 3: 858, 4: 848 }, CATALOG_IMG_H = 1618;
+    var GRID_MT_ATTR = "narrowhud_grid_mt";
+    function setGridMargin(grid, v) {
+        grid.style.marginTop = v.toFixed(2) + "px";
+        grid.SetAttributeString(GRID_MT_ATTR, v.toFixed(2));
+    }
+    function fixCatalog(m, tab, force) {
+        var f = m.mainH / SHOP_MAIN_H, info = "catalog tab=" + (tab || "-") + " f=" + f.toFixed(3);
+        // the window's shape does not change while the shop is open, so the picture is only ever switched to
+        // stretching (never back); checked on the 0.5 s update only
+        if (force) {
+            try {
+                if (m.lists && m.lists.IsValid() && m.lists.actuallayoutwidth > 0 &&
+                    m.lists.actuallayoutheight / m.lists.actuallayoutwidth > 1 / CATALOG_IMG_ASPECT) {
+                    m.lists.style.backgroundSize = "100% 100%";
+                    m.bgStretched = true;
+                }
+            } catch (e) { log("catalog bg error: " + e); }
+        }
+        if (m.bgStretched) { info += " bg=stretch"; }
+        try {
+            if (tab && Math.abs(f - 1) > 0.001 && m.lists && m.lists.IsValid()) {
+                if (!m.tiers || !m.tiers.IsValid()) { m.tiers = m.filtered.FindChildTraverse("ModTiers"); }
+                if (!m.tiers) { catalogInfo = info + " no tiers"; return; }
+                var u = m.lists.actualuiscale_y;                         // real px per shop unit
+                var boxH = m.lists.actuallayoutheight / u;
+                var g = boxH / (boxH - (m.mainH - SHOP_MAIN_H));        // picture stretch vs vanilla
+                var o = sane(offsetInY(m.tiers, m.lists) / u);
+                info += " box=" + boxH.toFixed(0) + " g=" + g.toFixed(3) + " o=" + o.toFixed(1) + " c=grid/row/gridmove:";
+                var rows = [], n = m.tiers.GetChildCount();
+                for (var i = 0; i < n; i++) {
+                    var c = m.tiers.GetChild(i);
+                    if (!c || !c.BHasClass("tierRow")) { continue; }
+                    if (c.BHasClass(ROW_MARK) && !force) { rows.push(c); continue; }
+                    // anchor the item grid (#ModLists, below the price label), not the row's top
+                    var grid = c.FindChild("ModLists");
+                    var applied = grid ? parseFloat(grid.GetAttributeString(GRID_MT_ATTR, "0")) || 0 : 0;
+                    var gy = grid ? sane(offsetInY(grid, c) / u - applied) : 0;
+                    for (var t in TIER_Y) {
+                        if (!c.BHasClass("EModTier_" + t)) { continue; }
+                        var rowMove = TAB_PX[t] / CATALOG_IMG_H * (boxH / g) * (g - 1);
+                        var gridMove = (TIER_Y[t] + o + gy) * (g - 1);
+                        c.style.marginTop = rowMove.toFixed(2) + "px";
+                        if (grid) { setGridMargin(grid, gridMove - rowMove); }
+                        c.AddClass(ROW_MARK);
+                        rows.push(c);
+                        info += t + ":" + gy.toFixed(0) + "/" + rowMove.toFixed(0) + "/" + gridMove.toFixed(0) + ",";
+                    }
+                }
+                movedRows = rows;   // rebuilt every pass (also takes over rows a hot-reloaded predecessor moved)
+                info += " rows=" + rows.length + "/" + n;
+            } else if (movedRows.length) {
+                for (var j = 0; j < movedRows.length; j++) {
+                    var r = movedRows[j];
+                    if (!r.IsValid()) { continue; }
+                    r.style.marginTop = "0px";
+                    var rg = r.FindChild("ModLists");
+                    if (rg) { setGridMargin(rg, 0); }
+                    r.RemoveClass(ROW_MARK);
+                }
+                movedRows = [];
+            }
+        } catch (e) { movedRows = []; log("catalog rows error: " + e); }
+        catalogInfo = info;
+    }
+
+    // The build browser popup (layout/popups/citadel_popup_build_browser.xml) is laid out for a 1080px-tall
+    // popup canvas: #BuildsContent starts 40px down and its list box (.MainContainer) is a fixed 830px, so a
+    // taller canvas leaves the bottom empty: the list box grows by the extra height, like the shop (centring
+    // the vanilla-sized content instead was the alternative; the user preferred filling).
+    var popupMgr = null;
+    function fixBuildBrowser() {
+        if (!popupMgr || !popupMgr.IsValid()) { return; }
+        var n = popupMgr.GetChildCount();
+        for (var i = 0; i < n; i++) {
+            var p = popupMgr.GetChild(i);
+            if (!p || p.paneltype !== "PopupBuildBrowser") { continue; }
+            var u = p.actualuiscale_y;
+            if (!(u > 0) || !(p.actuallayoutheight > 0)) { continue; }
+            var extra = p.actuallayoutheight / u - 1080;
+            var key = extra.toFixed(0);
+            if (extra < 1 || p.GetAttributeString("narrowhud_bb", "") === key) { continue; }
+            var content = p.FindChild("BuildsContent");
+            var main = content && findClass(content, "MainContainer");
+            if (!main) { continue; }   // the selector fills in later; try again next poll
+            main.style.height = (830 + extra).toFixed(2) + "px";
+            p.SetAttributeString("narrowhud_bb", key);
+            log("build browser: extra=" + key);
+        }
     }
 
     function watchShop() {
+        if (!alive()) { return; }
         try { applyShopMode(false); } catch (e) { log("shop error: " + e); }
+        try { fixBuildBrowser(); } catch (e) { log("build browser error: " + e); }
         $.Schedule(0.05, watchShop);
+    }
+
+    // Development hot reload (DEV_SEQ > 0). The engine caches a script by name and never re-reads it, so every
+    // `install.py --loose` adds a new name: layout/narrowhud_dev_<n>.xml including scripts/narrowhud_dev_<n>.vts.
+    // Once a second the running script tries to load the next one into an empty panel; BLoadLayout fails until
+    // the file exists. The new instance writes its number on the UI root (narrowhud_seq), and every loop of an
+    // older instance stops when it sees a different number there. Styles are re-applied by the new instance.
+    var SEQ_ATTR = "narrowhud_seq";
+    function alive() {
+        return !DEV_SEQ || !root || root.GetAttributeString(SEQ_ATTR, "") === String(DEV_SEQ);
+    }
+    function probeReload() {
+        if (!alive()) { return; }
+        var next = DEV_SEQ + 1, id = "NarrowHudReload" + next;
+        try {
+            var host = ctx.FindChild(id);
+            if (!host) {
+                host = $.CreatePanel("Panel", ctx, id);
+                host.hittest = false;
+            }
+            if (host.BLoadLayout("file://{resources}/layout/narrowhud_dev_" + next + ".xml", false, false)) {
+                log("hot reload: loading #" + next);
+                return;
+            }
+        } catch (e) { log("hot reload error: " + e); }
+        $.Schedule(1, probeReload);
     }
 
     function apply(force) {
@@ -299,7 +513,7 @@
             if (!k) { others.push((c.id || "-") + ":" + c.paneltype); continue; }
             if (k === "HudCore") { hudCore = c; }
             var cx = ux, cy = uy;
-            if (k === "PopupManager") { cx = tRef / sx; cy = tRef / sy; }   // popups (settings) ignore UI Size
+            if (k === "PopupManager") { cx = tRef / sx; cy = tRef / sy; popupMgr = c; }   // popups ignore UI Size
             c.style.uiScale = (cx * 100).toFixed(4) + "% " + (cy * 100).toFixed(4) + "% 100%";
             if (NOREGION[k]) {
                 c.style.width = (lw / sx / cx).toFixed(2) + "px";
@@ -317,9 +531,12 @@
                 c.style.marginBottom = (oy / sy).toFixed(2) + "px";
                 if (k === "EscapeMenu") { fixEscapeBackdrop(c, lw, lh, ox, oy, sx, sy, ux, uy); }
                 if (k === "HudCore") {
-                    fixShop(c, rw / sx / ux, rh / sy / uy, refW);
-                    fixHealthBar(c, sx * ux);
-                    fixCrosshair(c, narrow, sx, sy, ux, uy, lw, lh, rw / sx / ux, rh / sy / uy, ox, oy);
+                    // separately, so a failure in one leaves the others (and the debug label) working
+                    try { fixShop(c, rw / sx / ux, rh / sy / uy, refW); } catch (e) { log("shop error: " + e); }
+                    try { fixHealthBar(c, sx * ux); } catch (e) { log("health bar error: " + e); }
+                    try {
+                        fixCrosshair(c, narrow, sx, sy, ux, uy, lw, lh, rw / sx / ux, rh / sy / uy, ox, oy);
+                    } catch (e) { log("crosshair error: " + e); }
                 }
             } else if (ox > 0 || oy > 0) {
                 // edge-anchored containers: keep them inside the region (margins are in the root's units)
@@ -337,6 +554,9 @@
                 var sm = hudCore.FindChildTraverse("StatsAndModsContainer");
                 if (hb) { extra += "  hb x=" + (offsetIn(hb, hudCore) / u).toFixed(1); }
                 if (sm) { extra += "  sm x=" + (offsetIn(sm, hudCore) / u).toFixed(1); }
+                if (shopMode) {
+                    extra += "  shop s=" + shopMode.s.toFixed(3) + " extra h=" + shopMode.extra.toFixed(0) + "\n" + catalogInfo;
+                }
                 try {
                     var cr = hudCore.FindChildTraverse("crosshair");
                     var rp = cr && cr.FindChildTraverse("RightPip");
@@ -349,11 +569,21 @@
                     } else { extra += "\npips not found"; }
                 } catch (e) { extra += "\npips error " + e; }
             }
-            dbg.text = state + "\n" + extra + (lastError ? "\n" + lastError : "");
+            // the numbers go to the console (and console.log with -condebug) when they change, at most every 2 s;
+            // on screen only a small marker that the test build is running (and whether it hit an error)
+            var text = "build " + BUILD_ID + (DEV_SEQ ? " #" + DEV_SEQ : "") + "  " + state + "\n" + extra +
+                       (lastError ? "\n" + lastError : "");
+            var now = Date.now();
+            if (text !== lastDbgText && now - lastDbgTime >= 2000) {
+                lastDbgText = text; lastDbgTime = now;
+                $.Msg(TAG + " label:\n" + text);
+            }
+            dbg.text = "resize hud: ON" + (DEV_SEQ ? " #" + DEV_SEQ : "") + (lastError ? "  (error, see console)" : "");
         }
     }
 
     function tick() {
+        if (!alive()) { return; }
         try {
             if (!root) { root = findRoot(ctx); }
             apply(false);
@@ -364,22 +594,27 @@
     function init() {
         try {
             root = findRoot(ctx);
+            if (DEV_SEQ) { root.SetAttributeString(SEQ_ATTR, String(DEV_SEQ)); }   // stops older instances
             if (DEBUG) {
                 var isMenu = (root.paneltype === "CitadelDB" || root.id === "Dashboard");
-                dbg = $.CreatePanel("Label", root, isMenu ? "NarrowHudDebugMenu" : "NarrowHudDebugHud");
+                var dbgId = isMenu ? "NarrowHudDebugMenu" : "NarrowHudDebugHud";
+                dbg = root.FindChild(dbgId) || $.CreatePanel("Label", root, dbgId);   // reused on a script reload
                 dbg.style.position = isMenu ? "40px 700px 0px" : "40px 360px 0px";
                 dbg.style.color = isMenu ? "#00ccff" : "#00ff00";
                 dbg.style.zIndex = "2000000";
-                dbg.style.fontSize = "20px";
-                dbg.style.backgroundColor = "#000000c0";
-                dbg.style.padding = "6px";
-                dbg.text = TAG + " debug";
+                dbg.style.fontSize = "12px";
+                dbg.style.backgroundColor = "#00000080";
+                dbg.style.padding = "2px 4px";
+                dbg.text = "resize hud: ON";
             }
-            log("context=" + ctx.paneltype + "#" + ctx.id);
+            var reloading = typeof $.DbgIsReloadingScript === "function" ? $.DbgIsReloadingScript() : "n/a";
+            log("context=" + ctx.paneltype + "#" + ctx.id + " reloading=" + reloading + " build=" + BUILD_ID +
+                " dev=#" + DEV_SEQ);
             apply(true);
         } catch (e) { log("init error: " + e); }
         $.Schedule(0.5, tick);
         $.Schedule(0.05, watchShop);
+        if (DEV_SEQ) { $.Schedule(1, probeReload); }
     }
 
     $.Schedule(0.1, init);
