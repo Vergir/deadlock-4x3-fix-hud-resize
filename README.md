@@ -21,8 +21,7 @@ Download: [GameBanana](https://gamebanana.com/mods/728787) · [GitHub releases](
   items and the build editor take the shop's size while it is open.
 - **Menus:** keep the game's own size and 4:3 layout, only un-stretched (times the HUD size). The
   screens that break at that size are fitted instead: the shop and its build editor, Watch Matches
-  (its 2 x 2 grid), the player page, the post-match scoreboard and graphs. Hero select shows the whole
-  hero, with larger hero cards.
+  (its 2 x 2 grid), the player page, the post-match scoreboard and graphs.
 
 ## What it does not do
 
