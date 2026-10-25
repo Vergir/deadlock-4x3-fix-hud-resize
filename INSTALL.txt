@@ -4,6 +4,10 @@ A complete, un-stretched HUD on 4:3, 5:4 and other narrow screens, and a HUD siz
 any screen. Only the interface changes. Each zip is one HUD size: size1.0 is the plain fix (on 16:9
 and 16:10 it changes nothing), 0.5 ... 0.9 are smaller, 1.1 ... 1.5 larger. Install exactly one.
 
+Narrow screens first need their resolution set, whichever way you install (the mod does not change
+it): Steam > Deadlock > Properties > Launch Options, e.g.  -w 1280 -h 1024   (the game's video
+settings only list 16:9, 16:10 and 21:9 modes).
+
 With Deadlock Mod Manager: install from the GameBanana page and pick one size.
 
 Manually:
@@ -20,9 +24,7 @@ Manually:
             Game                core
 
    Deadlock updates overwrite this file; add the lines again when the mod stops loading.
-4. Narrow screens only: set your resolution in Steam > Deadlock > Properties > Launch Options,
-   e.g.  -w 1280 -h 1024   (the game's video settings only list 16:9, 16:10 and 21:9 modes).
-5. Restart Deadlock.
+4. Restart Deadlock.
 
 Uninstall: delete the vpk from the addons folder.
 
