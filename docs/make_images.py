@@ -253,7 +253,7 @@ def sizes():
         label(img, lbl, (x + 16, y + 16), 40)
         x += pw + gap
     label(img, "16:9: pick your HUD size (0.5 to 1.5)", (W // 2, top // 2), 56, anchor="mm")
-    save(img, "08_sizes.jpg")
+    save(img, "07_sizes.jpg")
 
 
 def thumbs(img):
@@ -273,7 +273,8 @@ HEALTH_M54 = (570, 1625, 935, 2135)
 if __name__ == "__main__":
     for stale in ("02_43_hud.jpg", "03_43_shop.jpg", "04_54_hud.jpg", "05_sizes.jpg", "04_54_roster.jpg",
                   "05_54_graphs.jpg", "06_54_profile.jpg", "07_sizes.jpg", "04_54_dialogue.jpg",
-                  "05_54_profile.jpg", "06_sizes.jpg", "04_54_profile.jpg", "05_54_other.jpg"):   # earlier galleries
+                  "05_54_profile.jpg", "06_sizes.jpg", "04_54_profile.jpg", "05_54_other.jpg",
+                  "06_54_scoreboard.jpg", "07_54_profile.jpg", "08_sizes.jpg"):   # earlier galleries
         if os.path.exists(os.path.join(OUT, stale)):
             os.remove(os.path.join(OUT, stale))
     tile = main_image()
@@ -284,8 +285,7 @@ if __name__ == "__main__":
     pair(("v_54_catalog", "m_54_catalog"), v_m, "03_54_items.jpg", "5:4 shop: your hero in view, nothing overlaps")
     pair(("v_54_editbuild", "m_54_editbuild"), v_m, "04_54_editbuild.jpg", "Edit Build: the panel no longer covers the items")
     pair(("v_54_watch", "m_54_watch"), v_m, "05_54_watch.jpg", "Watch Matches: the 2 x 2 grid fits")
-    pair(("v_54_scoreboard", "m_54_scoreboard"), v_m, "06_54_scoreboard.jpg", "Post-match scoreboard: every column fits")
-    pair(("v_54_profile", "m_54_profile"), v_m, "07_54_profile.jpg", "Player page: nothing cut off")
+    pair(("v_54_profile", "m_54_profile"), v_m, "06_54_profile.jpg", "Player page: nothing cut off")
     sizes()
     if "--thumbs" in sys.argv:
         thumbs(tile)
