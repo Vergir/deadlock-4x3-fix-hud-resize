@@ -32,6 +32,10 @@ Download: [GameBanana](https://gamebanana.com/mods/728787) · [GitHub releases](
 
 ## Installation
 
+Narrow screens first need their resolution set, whichever way you install (the mod does not change
+it, and the game's video settings only offer 16:9, 16:10 and 21:9): in Steam, *Deadlock > Properties >
+General > Launch Options*, enter it, e.g. `-w 1280 -h 1024`.
+
 With **Deadlock Mod Manager**: install the mod from its GameBanana page and pick one size.
 
 Manually:
@@ -50,9 +54,7 @@ Manually:
    Game     citadel
    Game     core
    ```
-4. Narrow screens only: in Steam, *Deadlock > Properties > General > Launch Options*, enter your
-   resolution, e.g. `-w 1280 -h 1024`.
-5. Restart Deadlock.
+4. Restart Deadlock.
 
 **Uninstall:** delete the vpk. The `gameinfo.gi` lines are the ones every addon uses and can stay.
 
