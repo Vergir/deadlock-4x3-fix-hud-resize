@@ -14,14 +14,16 @@ Download: [GameBanana](https://gamebanana.com/mods/728787) · [GitHub releases](
   16:9 screen of the same width, so nothing falls off the edge: the health bar is back (vanilla
   pushes it out of view) and the shop's Quick Buy column no longer covers the items.
 - **HUD size:** eleven versions from 0.5 to 1.5. Size 1.0 is the vanilla size on 16:9 and 16:10, so
-  there it changes nothing; the other sizes shrink or enlarge the whole HUD and the menus.
+  there it changes nothing; the other sizes shrink or enlarge the whole HUD, and the menus as far as
+  they still fit.
 - **Crosshair:** shows the real bullet spread at every HUD size. On narrow screens it is round;
   vanilla stretches it there and shows the spread about twice as wide as it is.
 - **Shop:** stays at its normal size when the HUD is larger, so it always fits; Quick Buy, souls,
   items and the build editor take the shop's size while it is open.
-- **Menus:** keep the game's own size and 4:3 layout, only un-stretched (times the HUD size). The
-  screens that break at that size are fitted instead: the shop and its build editor, Watch Matches
-  (its 2 x 2 grid), the player page, the post-match scoreboard and graphs.
+- **Menus:** keep the game's own size and 4:3 layout, only un-stretched. Smaller HUD sizes shrink
+  them; larger ones enlarge a screen only where its layout still fits, otherwise it stays at the
+  game's own size. The screens that break even at that size are fitted instead: the shop and its build
+  editor, Watch Matches (its 2 x 2 grid), the player page, the post-match scoreboard and graphs.
 
 ## What it does not do
 
@@ -84,8 +86,8 @@ it to the screen, so everything is too tall, and panels placed as "centered, the
 amount" fall off the narrow canvas. A small script (`src/panorama/scripts/narrowhud.vts`), loaded by
 two tiny layouts the game always shows, measures the real stretch and rescales the interface's
 top-level containers: the HUD uniform and as wide as the 16:9 layout expects, the menus uniform at the
-game's own canvas width, both times the chosen size. On 16:9, 16:10 and 21:9 it keeps the game's own
-canvas. The shop, a few menu screens built wider than 4:3, the health bar and the crosshair get their
+game's own canvas width, both times the chosen size; a menu screen that would get less than the game's
+canvas that way shrinks back to it. On 16:9, 16:10 and 21:9 it keeps the game's own canvas. The shop, a few menu screens built wider than 4:3, the health bar and the crosshair get their
 own corrections; `npc_icons.css` carries the one CSS rule (the health bar position).
 
 ## Building from source

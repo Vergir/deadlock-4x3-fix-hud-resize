@@ -26,6 +26,10 @@
     // containers laid out at the menu scale (the game's own canvas width), not the HUD's (see apply)
     var MENUS = { DashboardMain: 1, EscapeMenu: 1 };
     var menuFitK = 1, popupVanillaK = 1;
+    // The game's own canvas for menus (1440x1080 on narrow screens, the screen's own on wide ones; set in apply):
+    // the size most menu layouts are made for. A screen that needs it but gets less (UI size above 1, a HUD region
+    // narrower than the screen) shrinks until it has that much (fitK); with enough room it keeps the menu's scale.
+    var vanillaW = 1920, vanillaH = 1080;
 
     // Give a panel its own scale k relative to its parent and cover the parent with it (less the insets, parent
     // units, that its margins take). Only once per k and parent size; k = 1 on a panel never scaled leaves it alone.
@@ -40,6 +44,15 @@
         p.style.width = (pw / k).toFixed(2) + "px";
         p.style.height = (ph / k).toFixed(2) + "px";
         p.SetAttributeString("narrowhud_fit", key);
+    }
+
+    // scale for a panel that needs needW x needH of its own units (default: the game's canvas) to cover its parent,
+    // relative to the parent; never above 1
+    function fitK(p, needW, needH) {
+        var parent = p.GetParent(), ux = parent && parent.actualuiscale_x, uy = parent && parent.actualuiscale_y;
+        if (!(ux > 0) || !(uy > 0) || !(parent.actuallayoutwidth > 0)) { return 1; }
+        return Math.min(1, parent.actuallayoutwidth / ux / (needW || vanillaW),
+                        parent.actuallayoutheight / uy / (needH || vanillaH));
     }
 
     var ctx = $.GetContextPanel();
@@ -452,7 +465,9 @@
     // the screen by itself. The grid gets the extra height and the cards grow with it: ui-scale k on
     // #RosterHeroes, its width held at the grid's 800px so fewer cards fit per row, k the largest whose rows
     // still fit. (Spreading the rows apart and centring the vanilla grid were tried; the user chose this.)
-    var CARD_W = 75 + 8, CARD_H = 124 + 8, GRID_PAD = 40;
+    // Cards are 75x125 + 4px margins (citadel_hero_card.css). The grid scrolls (overflow: scroll) when the cards
+    // come out taller than computed; then k drops a step per poll until they fit.
+    var CARD_W = 75 + 8, CARD_H = 125 + 8, GRID_PAD = 40;
     function rosterScale(count, gridH) {
         for (var k = 2; k > 1; k -= 0.01) {
             var cols = Math.floor((800 / k - GRID_PAD) / CARD_W);
@@ -471,14 +486,23 @@
             if (!size || !cards) { continue; }
             var extra = Math.max(0, size.h - 1080), count = cards.GetChildCount();
             if (extra >= 1) { enlargeRosterInfo(p); }
-            var key = extra.toFixed(0) + "/" + count;
-            if (extra < 1 || p.GetAttributeString("narrowhud_roster", "") === key) { continue; }
-            var k = rosterScale(count, 710 + extra);
+            var key = extra.toFixed(0) + "/" + count, k;
+            if (extra < 1) { continue; }
+            if (p.GetAttributeString("narrowhud_roster", "") === key) {
+                k = parseFloat(p.GetAttributeString("narrowhud_roster_k", "1"));
+                var over = cards.actuallayoutheight - grid.actuallayoutheight;   // real px
+                if (!(over > 0.5) || !(k > 1)) { continue; }
+                k = Math.max(1, k - 0.01);
+                log("roster select: cards " + over.toFixed(1) + "px too tall, k=" + k.toFixed(2));
+            } else {
+                k = rosterScale(count, 710 + extra);
+                log("roster select: extra=" + extra.toFixed(0) + " cards=" + count + " k=" + k.toFixed(2));
+            }
             grid.style.height = (710 + extra).toFixed(2) + "px";
             cards.style.uiScale = (k * 100).toFixed(2) + "% " + (k * 100).toFixed(2) + "% 100%";
             cards.style.width = (800 / k).toFixed(2) + "px";
             p.SetAttributeString("narrowhud_roster", key);
-            log("roster select: extra=" + extra.toFixed(0) + " cards=" + count + " k=" + k.toFixed(2));
+            p.SetAttributeString("narrowhud_roster_k", k.toFixed(2));
         }
     }
     // The hero's name, tags, abilities and gun tag (#HeroInfo, bottom right) and the stat icon column (#HeroStats,
@@ -600,6 +624,7 @@
         var mx = tMenu * uiSize / sx, my = tMenu * uiSize / sy;
         menuFitK = narrow ? Math.min(1, tRef / (tMenu * uiSize)) : 1;
         popupVanillaK = narrow ? tMenu / tRef : 1;
+        vanillaW = narrow ? 1440 : lw / sx; vanillaH = lh / sy;
         var key = [sx, sy, lw, lh, uiSize, narrow].join("|");
         var changed = force || key !== last;
         last = key;
@@ -618,6 +643,11 @@
             if (k === "DashboardMain") { dashMain = c; }
             var cx = ux, cy = uy;
             if (MENUS[k]) { cx = mx; cy = my; }
+            if (k === "EscapeMenu") {
+                // the Esc menu is laid out for the game's canvas: shrink it to that when the region gives it less
+                var ek = Math.min(1, rw / sx / mx / vanillaW, rh / sy / my / vanillaH);
+                cx = mx * ek; cy = my * ek;
+            }
             if (k === "PopupManager") { cx = tRef / sx; cy = tRef / sy; popupMgr = c; }   // popups ignore UI Size
             c.style.uiScale = (cx * 100).toFixed(4) + "% " + (cy * 100).toFixed(4) + "% 100%";
             if (NOREGION[k]) {
@@ -769,26 +799,19 @@
     // Growing the cards to use the height was tried (taller cards; with their content centred; with bigger
     // avatars and score); the user kept vanilla-size cards.
     //  - Match history (citadel_db_page_profile_match_history): #MatchHistoryTitleBar, 100px down, with the 4x4
-    //    card grid below it. `vanilla`: the game's 4:3 layout fits at the menu's own scale, so no fitting; only
-    //    centred (the un-stretched canvas is taller than 1080).
+    //    card grid below it (#MatchListing, 1330x720). The game's 4:3 canvas fits it; a smaller one (UI size above
+    //    1, a 1:1 region) wraps it to 3 columns, so the page fits itself to the game's canvas (fitK).
     var CENTRED_PAGES = [
         { type: "CitadelWatchPage", top: 170, part: function (p) { return findClass(p, "MatchContents"); },
           needW: 1660 + 80, title: { top: 90, part: function (p) { return p.FindChild("WatchTitle"); } } },
-        { type: "CitadelProfilePageMatchHistory", top: 100, part: function (p) { return p.FindChild("MatchHistoryTitleBar"); },
-          vanilla: true }
+        { type: "CitadelProfilePageMatchHistory", top: 100, part: function (p) { return p.FindChild("MatchHistoryTitleBar"); } }
     ];
-    // scale for a page that needs needW units across, relative to its parent (option A: never above the menu's)
-    function fitWidthK(page, needW) {
-        var parent = page.GetParent(), u = parent && parent.actualuiscale_x;
-        if (!(u > 0) || !(parent.actuallayoutwidth > 0)) { return 1; }
-        return Math.min(1, parent.actuallayoutwidth / u / needW);
-    }
     function fixCentredPages() {
         for (var i = 0; i < CENTRED_PAGES.length; i++) {
             var spec = CENTRED_PAGES[i], page = menuPages[spec.type];
             if (!page || !page.IsValid()) { page = menuPages[spec.type] = dashboardPage(spec.type); }
             if (!page) { continue; }
-            if (!spec.vanilla) { fitPanel(page, spec.needW ? fitWidthK(page, spec.needW) : menuFitK); }
+            fitPanel(page, fitK(page, spec.needW));
             var size = pageSize(page);
             if (!size) { continue; }
             var extra = Math.max(0, size.h - 1080), shift = extra / 2, key = extra.toFixed(0);
@@ -803,8 +826,13 @@
         }
     }
 
-    // Post-match page (post_game/citadel_db_page_post_game_new): a carousel of screens laid out for 1080px. Only
-    // two are changed (the team and MVP screens are left alone), each inside its own screen:
+    // Post-match page (post_game/citadel_db_page_post_game_new): a carousel of screens laid out for 1080px.
+    //  - Team screens (#Team1Screen > #Team1, post_game/citadel_db_post_game_team): six cards in a row, about 1400
+    //    units with their 90% and 94% ui-scales; MVP screen (CitadelPostGameProgressMVP, a carousel child the game
+    //    adds): the 1620px-wide details box centred over honourable mentions on the right. Both fit the game's 4:3
+    //    canvas; a smaller one cuts off the outer cards or runs the hero name into the key players, so they fit
+    //    themselves to the game's canvas (fitK). The team screen's backdrop stays on the screen, unscaled.
+    //  Two more are changed, each inside its own screen:
     //  - #ScoreboardScreen: match info and two teams of 6 player rows, from the top. It fits itself to a 1920-wide
     //    layout (at the game's 1440 units the right columns are cut off) and to a 1080-tall one (on a shorter page,
     //    UI size above 1 on a wide screen, it ran into the footer buttons); in a taller box it keeps its vanilla
@@ -819,6 +847,18 @@
         if (!postGamePage) { return; }
         var size = pageSize(postGamePage);
         if (!size) { return; }
+
+        var teamIds = ["Team1", "Team2"];
+        for (var ti = 0; ti < teamIds.length; ti++) {
+            var teamScreen = postGamePage.FindChildTraverse(teamIds[ti] + "Screen");
+            var team = teamScreen && teamScreen.FindChild(teamIds[ti]);
+            if (team) { fitPanel(team, fitK(team)); }
+        }
+        var carousel = postGamePage.FindChildTraverse("ScreensCarousel");
+        for (var ci = 0, nc = carousel ? carousel.GetChildCount() : 0; ci < nc; ci++) {
+            var screen = carousel.GetChild(ci);
+            if (screen && screen.paneltype === "CitadelPostGameProgressMVP") { fitPanel(screen, fitK(screen)); }
+        }
 
         var sbScreen = postGamePage.FindChildTraverse("ScoreboardScreen");
         var board = sbScreen && sbScreen.FindChild("Scoreboard");
@@ -857,7 +897,19 @@
         }
     }
 
+    // Every other main menu page is shown at the menu's scale and fitted to the game's canvas when it gets less
+    // (fitK): their layouts are made for it, e.g. Play (citadel_db_page_play) has its mode cards (430 + 500 + 430
+    // px and margins) in one row and squeezes the last one (Ranked) on a narrower canvas. Skipped: pages fitted
+    // above and the home page (the hideout, which keeps the UI size).
+    var OWN_FIT = { CitadelProfilePage: 1, CitadelWatchPage: 1, CitadelProfilePageMatchHistory: 1, CitadelPostGameNew: 1,
+                    CitadelHomePage: 1 };
     function fixMenuPages() {
+        var fg = dashMain && dashMain.IsValid() && dashMain.FindChild("ForegroundContainer");
+        var pages = fg && fg.FindChild("DashboardPages");
+        for (var f = 0, nf = pages ? pages.GetChildCount() : 0; f < nf; f++) {
+            var fp = pages.GetChild(f);
+            if (fp && !OWN_FIT[fp.paneltype]) { fitPanel(fp, fitK(fp)); }
+        }
         for (var i = 0; i < MENU_PAGES.length; i++) {
             var spec = MENU_PAGES[i], page = menuPages[spec.type];
             if (!page || !page.IsValid()) { page = menuPages[spec.type] = dashboardPage(spec.type); }
