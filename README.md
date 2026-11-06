@@ -41,7 +41,7 @@ With **Deadlock Mod Manager**: install the mod from its GameBanana page and pick
 
 Manually:
 
-1. Download one size, e.g. `deadlock-4x3-fix-hud-resize-v1.1.0-size1.0.zip`. Size 1.0 is the plain fix; pick another
+1. Download one size, e.g. `deadlock-4x3-fix-hud-resize-v1.1.2-size1.0.zip`. Size 1.0 is the plain fix; pick another
    size for a smaller or larger HUD.
 2. Copy `pak01_dir.vpk` from the zip into `Deadlock\game\citadel\addons\` (create the folder if needed).
    If a `pak01_dir.vpk` from another mod is already there, rename this one to the next free number
@@ -61,7 +61,7 @@ Manually:
 
 ## Compatibility
 
-- **Game version:** tested with Deadlock build 6819 (October 24, 2026) on Windows.
+- **Game version:** tested with Deadlock build 6860 (November 6, 2026) on Windows.
 - **After a game update:** the mod replaces three small UI files (`hud_data_feed.xml`,
   `citadel_dashboard_footer_bar.xml`, `npc_icons.css`). If an update changes one of them, the HUD
   falls back to vanilla, or the game stops at launch with an error naming the file; delete the vpk
